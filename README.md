@@ -9,6 +9,11 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `index.html` | Entrar (escolha entre profissional e empresa) |
 | `empresa.html` | Início da empresa logada |
 | `profissional.html` | Início do profissional logado |
+| `publicar-vaga.html` | Empresa: formulário para publicar uma vaga |
+| `candidatos.html?vaga=ID` | Empresa: candidatos da vaga, com filtro por status |
+| `perfil-profissional.html?id=ID` | Empresa: perfil do profissional (reputação, histórico, avaliações) |
+| `preencher-vaga.html?vaga=ID` | Empresa: indicar quem preencheu a vaga |
+| `avaliar-profissional.html?id=ID` | Empresa: avaliação cega do profissional |
 
 Interações simuladas:
 
@@ -17,6 +22,14 @@ Interações simuladas:
 - Na tela do profissional, "Confirmar" e "Não fui contratado" simulam a confirmação de contratação.
 - Tocar no avatar volta para o login.
 - Botões de telas que ainda não existem mostram um aviso.
+
+Jornada da empresa (simulada, sem back-end):
+
+- **Continuidade entre telas:** o que a pessoa faz fica em `sessionStorage` (vaga publicada, candidato movido de status, vaga marcada como preenchida, avaliação enviada). Fechar a aba ou entrar de novo pelo login recomeça a demonstração.
+- **Vaga publicada** aparece em "Minhas vagas" (início da empresa) e ganha profissionais indicados.
+- **Vaga marcada como preenchida** passa a "Preenchida · aguardando confirmação".
+- **Formulário de vaga** não tem campos de idade, gênero, raça, religião, estado civil, nacionalidade nem foto (proibidos por lei em muitos países).
+- Os números "candidatos novos" e "candidatos" da tela inicial vêm da lista de candidatos em `mock-data.js`.
 
 ## Como alterar os dados
 
@@ -28,10 +41,11 @@ Todos os nomes, números e vagas estão em `assets/js/mock-data.js`. Edite esse 
 index.html
 empresa.html
 profissional.html
+publicar-vaga.html, candidatos.html, perfil-profissional.html,
+preencher-vaga.html, avaliar-profissional.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
-CNAME                     domínio korbuildmatch.com (GitHub Pages)
 robots.txt                bloqueia buscadores durante a validação
 ```
 
