@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="assets/css/styles.css">
+<title>KORbuild Match — Entrar</title>
+</head>
+<body data-page="login">
+<div class="proto-banner" role="note">Protótipo de validação · todos os dados são fictícios</div>
+<main class="app">
+  <div class="login">
+    <div class="login-top">
+      <div class="brand">
+        <div class="brand-mark lg"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l8-7 8 7v8H4z"/><path d="M9 15l2 2 4-4"/></svg></div>
+        <div class="brand-name" style="font-size:18px">KORbuild <span>Match</span></div>
+      </div>
+      <button type="button" class="lang-btn" data-todo="A versão em inglês ainda não faz parte do protótipo." aria-label="Idioma: português. Trocar para inglês">PT · EN</button>
+    </div>
+
+    <div class="hero">
+      <h1>Empresas e profissionais, conectados com confiança.</h1>
+      <p>Histórico verificado e avaliação dos dois lados em cada contratação.</p>
+    </div>
+
+    <form class="login-card" id="login-form" novalidate>
+      <div class="field">
+        <span class="field-label" id="role-label">Entrar como</span>
+        <div class="segmented" role="group" aria-labelledby="role-label">
+          <button type="button" data-role="profissional" aria-pressed="true">Profissional</button>
+          <button type="button" data-role="empresa" aria-pressed="false">Empresa</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="login-email">E-mail</label>
+        <input id="login-email" type="email" autocomplete="email" placeholder="voce@email.com">
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label for="login-senha">Senha</label>
+          <a href="#" data-todo="A recuperação de senha ainda não faz parte do protótipo.">Esqueci minha senha</a>
+        </div>
+        <input id="login-senha" type="password" autocomplete="current-password" placeholder="Sua senha">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg" id="login-submit">Entrar como profissional</button>
+
+      <div class="divider">ou</div>
+
+      <button type="button" class="btn btn-outline btn-lg" style="font-size:15px;font-weight:600" data-todo="O login com Google ainda não faz parte do protótipo.">Continuar com Google</button>
+    </form>
+
+    <p class="login-foot">Ainda não tem conta? <a href="#" data-todo="O cadastro ainda não faz parte do protótipo.">Criar conta grátis</a></p>
+  </div>
+</main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="assets/js/mock-data.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
