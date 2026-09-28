@@ -14,6 +14,10 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `perfil-profissional.html?id=ID` | Empresa: perfil do profissional (reputação, histórico, avaliações) |
 | `preencher-vaga.html?vaga=ID` | Empresa: indicar quem preencheu a vaga |
 | `avaliar-profissional.html?id=ID` | Empresa: avaliação cega do profissional |
+| `vaga.html?id=ID` | Profissional: detalhe da vaga e candidatura |
+| `candidaturas.html` | Profissional: minhas candidaturas, com linha do tempo |
+| `perfil-empresa.html?id=ID` | Profissional: perfil da empresa (reputação, vagas, avaliações) |
+| `avaliar-empresa.html?id=ID` | Profissional: avaliação cega da empresa |
 
 Interações simuladas:
 
@@ -31,6 +35,13 @@ Jornada da empresa (simulada, sem back-end):
 - **Formulário de vaga** não tem campos de idade, gênero, raça, religião, estado civil, nacionalidade nem foto (proibidos por lei em muitos países).
 - Os números "candidatos novos" e "candidatos" da tela inicial vêm da lista de candidatos em `mock-data.js`.
 
+Jornada do profissional (simulada, sem back-end; o profissional logado é o João Silva):
+
+- **Continuidade entre telas:** fica em `sessionStorage`, à parte do estado da empresa (candidatura enviada, confirmação de contratação, avaliação enviada, empresa seguida). O login zera as duas jornadas.
+- **Candidatar-se** é um passo único: mostra o resumo do que será enviado (perfil já preenchido) antes de confirmar. Depois, a vaga já aparece em Minhas candidaturas e o botão na tela da vaga vira "Candidatura enviada · ver status".
+- **Consistência entre as duas jornadas:** a contratação que o João confirma aqui é a mesma que a Empresa Exemplo marca como preenchida na jornada da empresa (a vaga de Recepcionista). Confirmar de um lado atualiza o que o outro lado vê — por exemplo, `candidatos.html?vaga=recepcionista` já mostra João Silva como contratado depois que ele confirma pela tela do profissional, mesmo sem passar por `preencher-vaga.html`.
+- A reputação da Empresa Exemplo e da Loja Central usa os mesmos números nas duas jornadas (definidos uma vez em `mock-data.js`).
+
 ## Como alterar os dados
 
 Todos os nomes, números e vagas estão em `assets/js/mock-data.js`. Edite esse arquivo e publique de novo; não é preciso mexer no restante do código.
@@ -43,6 +54,7 @@ empresa.html
 profissional.html
 publicar-vaga.html, candidatos.html, perfil-profissional.html,
 preencher-vaga.html, avaliar-profissional.html
+vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações

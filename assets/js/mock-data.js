@@ -9,12 +9,20 @@
     return { entregou: entregou, horarios: horarios, comunicacao: comunicacao, novamente: novamente };
   }
 
+  // Respostas objetivas de uma avaliação de empresa, na ordem das perguntas.
+  function respE(pagamento, anuncio, condicoes, ambiente, novamente) {
+    return { pagamento: pagamento, anuncio: anuncio, condicoes: condicoes, ambiente: ambiente, novamente: novamente };
+  }
+
+  // Reputação da Empresa Exemplo: a mesma na jornada da empresa e na do profissional.
+  var REP_EXEMPLO = { nota: '4,7', contratacoes: 23, pagouConforme: '96%' };
+
   window.MOCK = {
     empresa: {
       nome: 'Empresa Exemplo',
       iniciais: 'EE',
       verificada: true,
-      reputacao: { nota: '4,7', contratacoes: 23, pagouConforme: '96%' },
+      reputacao: REP_EXEMPLO,
 
       // Quantos requisitos uma vaga tem, quando ela não informa (vagas publicadas na demonstração).
       requisitosPadrao: 5,
@@ -274,6 +282,7 @@
         local: 'São Paulo, SP · Brasil', disponibilidade: 'Disponível imediatamente',
         nota: '4,8', trabalhos: 6, contrataria: '100%', verificado: true,
         experienciaVerificada: [
+          { cargo: 'Atendente', empresa: 'Loja Central', periodo: '2025 – 2026' },
           { cargo: 'Recepcionista', empresa: 'Hotel Vista Mar', periodo: '2024 – 2025' },
           { cargo: 'Recepcionista', empresa: 'Clínica Bem Viver', periodo: '2023 – 2024' }
         ],
@@ -281,7 +290,7 @@
           { cargo: 'Auxiliar administrativo', empresa: 'Contabilidade Souza', periodo: '2022 – 2023' }
         ],
         competencias: ['Atendimento ao público', 'Agenda e telefonia', 'Pacote Office', 'Organização'],
-        idiomas: ['Português · Nativo', 'Inglês · Avançado'],
+        idiomas: ['Português · Nativo', 'Inglês · Intermediário'],
         formacao: ['Tecnólogo em Gestão de Pessoas · concluído'],
         avaliacoes: [
           { empresa: 'Hotel Vista Mar', quando: 'há 6 meses', nota: 5, respostas: resp('Sim', 'Sim', 'Sim', 'Sim'),
@@ -384,22 +393,186 @@
       }
     },
 
+    // Empresas vistas pelo profissional. A chave é o id usado nos links.
+    // Empresa Exemplo usa a mesma reputação da jornada da empresa.
+    empresas: {
+      'empresa-exemplo': {
+        nome: 'Empresa Exemplo', iniciais: 'EE', setor: 'Comércio e serviços', local: 'São Paulo, SP · Brasil', verificada: true,
+        nota: REP_EXEMPLO.nota, contratacoes: REP_EXEMPLO.contratacoes, pagouConforme: REP_EXEMPLO.pagouConforme,
+        correspondia: '94%', trabalhariaNovamente: '91%',
+        avaliacoes: [
+          { autor: 'Bruno T.', quando: 'há 2 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Pagamento em dia e equipe muito acessível.', resposta: 'Obrigado pelo trabalho, Bruno!' },
+          { autor: 'Camila R.', quando: 'há 5 meses', nota: 4, respostas: respE('Sim', 'Parcialmente', 'Sim', 'Sim', 'Sim'),
+            comentario: 'A rotina teve mais atendimento por telefone do que o anúncio dizia.' }
+        ]
+      },
+      'loja-central': {
+        nome: 'Loja Central', iniciais: 'LC', setor: 'Varejo', local: 'São Paulo, SP · Brasil', verificada: true,
+        nota: '4,6', contratacoes: 31, pagouConforme: '98%', correspondia: '95%', trabalhariaNovamente: '92%',
+        avaliacoes: [
+          { autor: 'Ana S.', quando: 'há 8 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Metas claras e comissão paga no prazo.', resposta: 'Ana foi uma referência para a equipe. Obrigado!' },
+          { autor: 'Paulo A.', quando: 'há 4 meses', nota: 4, respostas: respE('Sim', 'Sim', 'Parcialmente', 'Sim', 'Sim'),
+            comentario: 'Bom ambiente. As escalas mudavam com pouco aviso em datas de promoção.' }
+        ]
+      },
+      'grupo-horizonte': {
+        nome: 'Grupo Horizonte', iniciais: 'GH', setor: 'Serviços administrativos', local: 'São Paulo, SP · Brasil', verificada: true,
+        nota: '4,7', contratacoes: 12, pagouConforme: '100%', correspondia: '96%', trabalhariaNovamente: '94%',
+        avaliacoes: [
+          { autor: 'Fernanda C.', quando: 'há 7 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Trabalho híbrido bem organizado e gestão respeitosa.' }
+        ]
+      },
+      'hotel-vista-mar': {
+        nome: 'Hotel Vista Mar', iniciais: 'HV', setor: 'Hotelaria', local: 'Santos, SP · Brasil', verificada: true,
+        nota: '4,5', contratacoes: 18, pagouConforme: '95%', correspondia: '90%', trabalhariaNovamente: '89%',
+        avaliacoes: [
+          { autor: 'Mariana R.', quando: 'há 1 ano', nota: 4, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Parcialmente'),
+            comentario: 'Boa estrutura. Na alta temporada a carga de trabalho aumenta bastante.' }
+        ]
+      },
+      'cafe-aurora': {
+        nome: 'Café Aurora', iniciais: 'CA', setor: 'Alimentação', local: 'São Paulo, SP · Brasil', verificada: false,
+        nota: '4,4', contratacoes: 9, pagouConforme: '93%', correspondia: '92%', trabalhariaNovamente: '88%',
+        avaliacoes: [
+          { autor: 'Juliana A.', quando: 'há 4 meses', nota: 4, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Equipe unida e gorjetas divididas com transparência.' }
+        ]
+      },
+      'nova-rota': {
+        nome: 'Nova Rota Serviços', iniciais: 'NR', setor: 'Atendimento e logística', local: 'Curitiba, PR · Brasil', verificada: false,
+        novo: true, avaliacoes: []
+      }
+    },
+
+    // Vagas abertas que o profissional pode ver. "atende" já considera o perfil do João Silva.
+    vagas: {
+      'atendente-loja': {
+        id: 'atendente-loja', titulo: 'Atendente de loja', empresa: 'loja-central',
+        local: 'São Paulo, SP · Brasil', modelo: 'Presencial', tipo: 'Tempo integral',
+        salario: { moeda: 'BRL', min: 2200, max: 2600, periodo: 'mes' }, posicoes: 2, publicadaEm: '2026-09-21',
+        requisitos: [
+          { texto: 'Atendimento ao público', atende: true },
+          { texto: 'Experiência com atendimento (1 ano)', atende: true },
+          { texto: 'Ensino médio completo', atende: true },
+          { texto: 'Trabalho em equipe', atende: true },
+          { texto: 'Disponibilidade para escala 6x1', atende: true }
+        ],
+        descricao: 'Atendimento aos clientes no salão, organização das prateleiras e apoio ao caixa nos horários de pico.',
+        competencias: ['Atendimento ao público', 'Organização', 'Trabalho em equipe'],
+        idiomas: ['Português · Nativo']
+      },
+      'assistente-adm': {
+        id: 'assistente-adm', titulo: 'Assistente administrativo', empresa: 'grupo-horizonte',
+        local: 'São Paulo, SP · Brasil', modelo: 'Híbrido', tipo: 'Meio período',
+        salario: { moeda: 'BRL', min: 1800, max: 2200, periodo: 'mes' }, posicoes: 1, publicadaEm: '2026-09-18',
+        requisitos: [
+          { texto: 'Pacote Office', atende: true },
+          { texto: 'Rotinas administrativas', atende: true },
+          { texto: 'Organização de documentos', atende: true },
+          { texto: 'Comunicação escrita', atende: true },
+          { texto: 'Excel avançado', atende: false }
+        ],
+        descricao: 'Você vai apoiar o time administrativo do Grupo Horizonte em três frentes: atendimento interno e por telefone, organização e arquivo de documentos, e rotinas de compras e contratos. ' +
+          'O trabalho é híbrido, com dois dias por semana no escritório, em meio período. Você terá um mentor nos primeiros 30 dias e acesso a treinamentos internos de planilhas e sistemas. ' +
+          'Buscamos alguém organizado, com boa comunicação escrita e vontade de aprender ferramentas novas. Conhecimento de Excel avançado é um diferencial, mas o treinamento faz parte da vaga.',
+        competencias: ['Rotinas administrativas', 'Pacote Office', 'Excel', 'Comunicação escrita'],
+        idiomas: ['Português · Nativo']
+      },
+      'suporte-cliente': {
+        id: 'suporte-cliente', titulo: 'Suporte ao cliente', empresa: 'nova-rota',
+        local: 'Remoto', modelo: 'Remoto', tipo: 'Tempo integral',
+        salario: { moeda: 'BRL', min: 2500, max: 3000, periodo: 'mes' }, posicoes: 3, publicadaEm: '2026-09-25',
+        requisitos: [
+          { texto: 'Atendimento ao cliente', atende: true },
+          { texto: 'Comunicação clara', atende: true },
+          { texto: 'Sistemas de cadastro', atende: true },
+          { texto: 'Inglês avançado', atende: false },
+          { texto: 'Experiência em suporte', atende: false }
+        ],
+        descricao: 'Atendimento por chat e e-mail a clientes de uma plataforma de entregas, com foco em resolver o problema no primeiro contato.',
+        competencias: ['Atendimento ao cliente', 'Comunicação', 'Sistemas de cadastro'],
+        idiomas: ['Português · Nativo', 'Inglês · Avançado']
+      },
+      'recepcionista-exemplo': {
+        id: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo',
+        local: 'São Paulo, SP · Brasil', modelo: 'Presencial', tipo: 'Tempo integral',
+        salario: { moeda: 'BRL', min: 2000, max: 2400, periodo: 'mes' }, posicoes: 1, publicadaEm: '2026-08-28',
+        requisitos: [
+          { texto: 'Atendimento ao público', atende: true },
+          { texto: 'Agenda e telefonia', atende: true },
+          { texto: 'Pacote Office', atende: true },
+          { texto: 'Organização', atende: true },
+          { texto: 'Inglês básico', atende: true }
+        ],
+        descricao: 'Recepção de clientes e visitantes, controle de agenda e atendimento telefônico da Empresa Exemplo.',
+        competencias: ['Atendimento ao público', 'Agenda e telefonia', 'Pacote Office'],
+        idiomas: ['Português · Nativo', 'Inglês · Básico']
+      },
+      'atendente-exemplo': {
+        id: 'atendente-exemplo', titulo: 'Atendente de loja', empresa: 'empresa-exemplo',
+        local: 'São Paulo, SP · Brasil', modelo: 'Presencial', tipo: 'Tempo integral',
+        salario: { moeda: 'BRL', min: 1900, max: 2300, periodo: 'mes' }, posicoes: 2, publicadaEm: '2026-09-10',
+        requisitos: [
+          { texto: 'Atendimento ao público', atende: true },
+          { texto: 'Trabalho em equipe', atende: true },
+          { texto: 'Ensino médio completo', atende: true },
+          { texto: 'Operação de caixa', atende: false }
+        ],
+        descricao: 'Atendimento aos clientes da loja e organização do espaço de vendas da Empresa Exemplo.',
+        competencias: ['Atendimento ao público', 'Vendas'],
+        idiomas: ['Português · Nativo']
+      }
+    },
+
+    // O profissional logado é o João Silva (perfil em "profissionais").
     profissional: {
+      id: 'joao-silva',
       nome: 'João',
       iniciais: 'JS',
       reputacao: { nota: '4,8', trabalhos: 6, contratariamDeNovo: '100%' },
 
-      confirmacao: {
-        empresa: 'Empresa Exemplo',
-        vaga: 'Recepcionista'
+      // Contratação a confirmar: a mesma que a Empresa Exemplo marca na jornada da empresa.
+      confirmacao: { empresa: 'empresa-exemplo', vaga: 'Recepcionista', vagaId: 'recepcionista' },
+
+      // Avaliação cega pendente (vínculo anterior)
+      avaliacao: { empresa: 'loja-central', prazoDias: 3 },
+
+      vagasIndicadas: ['atendente-loja', 'assistente-adm', 'suporte-cliente'],
+
+      // Candidaturas anteriores. "confirmar": depende da confirmação de contratação;
+      // "avaliar": contratado e confirmado, com avaliação da empresa pendente.
+      candidaturas: [
+        { id: 'recepcionista-exemplo', vaga: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo', data: '2026-09-02', status: 'contratado', confirmar: true },
+        { id: 'atendente-hotel', vaga: null, titulo: 'Recepcionista de plantão', empresa: 'hotel-vista-mar', data: '2026-09-15', status: 'entrevista' },
+        { id: 'atendente-cafe', vaga: null, titulo: 'Atendente de balcão', empresa: 'cafe-aurora', data: '2026-08-20', status: 'nao', alcancou: 'analise' },
+        { id: 'atendente-loja-anterior', vaga: null, titulo: 'Atendente', empresa: 'loja-central', data: '2025-01-12', status: 'contratado', avaliar: true }
+      ],
+
+      // Avaliação de empresa (cega)
+      avaliacaoEmpresa: {
+        prazoPadrao: 7,
+        limiteComentario: 300,
+        respostas: ['Sim', 'Não', 'Parcialmente'],
+        perguntas: [
+          { id: 'pagamento', texto: 'O pagamento foi feito conforme combinado?' },
+          { id: 'anuncio', texto: 'A vaga correspondia ao anúncio?' },
+          { id: 'condicoes', texto: 'Condições e prazos foram cumpridos?' },
+          { id: 'ambiente', texto: 'O ambiente de trabalho foi respeitoso?' },
+          { id: 'novamente', texto: 'Trabalharia novamente para esta empresa?' }
+        ]
       },
 
-      avaliacao: { empresa: 'Loja Central', prazo: '3 dias' },
-
-      vagasIndicadas: [
-        { titulo: 'Atendente de loja', empresa: 'Loja Central', modelo: 'Presencial', tipo: 'Tempo integral', requisitos: '5 de 5', notaEmpresa: '4,6', contratacoesEmpresa: 31, pagouConforme: '98%' },
-        { titulo: 'Assistente administrativo', empresa: 'Grupo Horizonte', modelo: 'Híbrido', tipo: 'Meio período', requisitos: '4 de 5', notaEmpresa: '4,7', contratacoesEmpresa: 12, falta: 'Excel avançado' },
-        { titulo: 'Suporte ao cliente', empresa: 'Nova Rota Serviços', modelo: 'Remoto', tipo: 'Tempo integral', requisitos: '3 de 5', empresaNova: true, falta: 'inglês avançado, experiência em suporte' }
+      // Etapas do processo seletivo
+      etapas: [
+        { id: 'enviada', rotulo: 'Enviada' },
+        { id: 'visualizada', rotulo: 'Visualizada' },
+        { id: 'analise', rotulo: 'Em análise' },
+        { id: 'entrevista', rotulo: 'Entrevista' },
+        { id: 'contratado', rotulo: 'Contratado' },
+        { id: 'nao', rotulo: 'Não selecionado' }
       ]
     }
   };
