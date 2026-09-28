@@ -92,6 +92,31 @@
     return '<div><div class="rep-value">' + esc(value) + '</div><div class="rep-label">' + esc(label) + '</div></div>';
   }
 
+  function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
+
+  // Seção que abre e fecha ao tocar no cabeçalho. Começa fechada.
+  function accordion(id, title, summary, body, dark) {
+    return '<section class="acc' + (dark ? ' acc-dark' : '') + '">' +
+      '<h2 class="acc-h"><button type="button" class="acc-btn" id="' + id + '-btn" aria-expanded="false" aria-controls="' + id + '-panel">' +
+        '<span class="acc-text"><span class="acc-title">' + esc(title) + '</span>' +
+        '<span class="acc-sum" id="' + id + '-sum">' + esc(summary) + '</span></span>' +
+        '<span class="acc-arrow">' + icon('down', 20, { stroke: 2 }) + '</span></button></h2>' +
+      '<div class="acc-panel" id="' + id + '-panel" role="region" aria-labelledby="' + id + '-btn">' +
+        '<div class="acc-clip"><div class="acc-inner">' + body + '</div></div></div></section>';
+  }
+
+  function accMore(label) {
+    return '<div class="acc-more"><a href="#" data-todo="' + TODO + '">' + esc(label) + '</a></div>';
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.acc-btn');
+    if (!b) return;
+    var open = b.getAttribute('aria-expanded') === 'true';
+    b.setAttribute('aria-expanded', String(!open));
+    b.closest('.acc').classList.toggle('is-open', !open);
+  });
+
   var STATUS_CHIP = { 'Aberta': 'green', 'Pausada': 'grey', 'Preenchida': 'blue' };
 
   /* ---------- Login ---------- */
@@ -158,33 +183,36 @@
         '<span class="chip ' + (STATUS_CHIP[v.status] || 'grey') + '">' + esc(v.status) + '</span></div>';
     }).join('');
 
+    var nAbertas = d.vagas.filter(function (v) { return v.status === 'Aberta'; }).length;
+
+    function indSummary() {
+      var v = d.vagas.filter(function (x) { return x.id === selecionada; })[0];
+      return v ? d.indicados[v.id].length + ' para ' + v.titulo : 'Nenhum profissional indicado';
+    }
+
     $('#content').innerHTML =
-      '<div class="stack"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
+      '<div class="greeting-row"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
         '<p>' + d.pendencias.length + ' itens precisam da sua atenção hoje.</p></div>' +
-        '<a href="#" class="btn btn-primary btn-lg" data-todo="' + TODO + '">' + icon('plus', 20, { stroke: 2.2 }) + 'Publicar nova vaga</a></div>' +
+        '<a href="#" class="btn btn-primary" data-todo="' + TODO + '">' + icon('plus', 16, { stroke: 2.2 }) + 'Publicar nova vaga</a></div>' +
 
       '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pend + '</section>' +
 
-      '<section class="section" aria-labelledby="h-ind">' +
-        '<div class="section-head"><h2 id="h-ind">Profissionais indicados</h2><a href="#" data-todo="' + TODO + '">Ver todos</a></div>' +
+      accordion('acc-ind', 'Profissionais indicados', indSummary(),
         '<div class="filter" role="group" aria-label="Escolha a vaga" id="ind-filter"></div>' +
         '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Atendem os requisitos da vaga e têm reputação no mesmo nível da sua empresa.</span></p>' +
         '<div class="section" id="ind-list" aria-live="polite"></div>' +
-      '</section>' +
+        accMore('Ver todos')) +
 
-      '<section class="rep-card" aria-labelledby="h-rep">' +
-        '<div class="section-head"><h2 id="h-rep">Reputação da empresa</h2>' +
-        (d.verificada ? '<span class="rep-badge">' + icon('check', 14, { stroke: 2.5 }) + 'Empresa verificada</span>' : '') + '</div>' +
+      accordion('acc-rep', 'Reputação da empresa', 'Nota ' + rep.nota + ' · ' + plural(rep.contratacoes, 'contratação', 'contratações'),
+        (d.verificada ? '<span class="rep-badge">' + icon('check', 14, { stroke: 2.5 }) + 'Empresa verificada</span>' : '') +
         '<div class="rep-grid">' + repStat(rep.nota, 'Nota geral') + repStat(rep.contratacoes, 'Contratações verificadas') + repStat(rep.pagouConforme, 'Pagou conforme combinado') + '</div>' +
-        '<p class="rep-foot">Conta só contratações confirmadas pelos dois lados.</p>' +
-      '</section>' +
+        '<p class="rep-foot">Conta só contratações confirmadas pelos dois lados.</p>', true) +
 
-      '<section class="section" aria-labelledby="h-vagas">' +
-        '<div class="section-head"><h2 id="h-vagas">Minhas vagas</h2><a href="#" data-todo="' + TODO + '">Ver todas</a></div>' +
-        '<div class="list">' + vagas + '</div>' +
-      '</section>';
+      accordion('acc-vagas', 'Minhas vagas', plural(d.vagas.length, 'vaga', 'vagas') + ' · ' + plural(nAbertas, 'aberta', 'abertas'),
+        '<div class="list">' + vagas + '</div>' + accMore('Ver todas'));
 
     function renderIndicados() {
+      $('#acc-ind-sum').textContent = indSummary();
       $('#ind-filter').innerHTML = abertas.map(function (v) {
         var n = d.indicados[v.id].length;
         return '<button type="button" data-vaga="' + esc(v.id) + '" aria-pressed="' + (v.id === selecionada) + '">' + esc(v.titulo) + ' · ' + n + '</button>';
@@ -200,7 +228,7 @@
           '<div class="row-main"><div class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nome + '</div>' +
           '<div class="row-sub">' + esc(p.resumo) + '</div></div></div>' +
           '<div class="chips"><span class="chip green">Atende ' + esc(p.requisitos) + '</span>' + rep + '</div>' +
-          '<div class="btn-row"><a href="#" class="btn btn-primary btn-grow" data-todo="Convite enviado para ' + esc(p.nome) + ' (simulação).">Convidar para a vaga</a>' +
+          '<div class="btn-row"><a href="#" class="btn btn-primary" data-todo="Convite enviado para ' + esc(p.nome) + ' (simulação).">Convidar para a vaga</a>' +
           '<a href="#" class="btn btn-outline" data-todo="' + TODO + '">Ver perfil</a></div></article>';
       }).join('');
     }
@@ -263,16 +291,13 @@
         rowLink({ icone: 'star', tom: 'amber', titulo: 'Avalie a ' + d.avaliacao.empresa, texto: 'Prazo termina em ' + d.avaliacao.prazo + '. Sua avaliação fica oculta até a empresa enviar a dela.' }) +
       '</section>' +
 
-      '<section class="rep-card" aria-labelledby="h-rep">' +
-        '<div class="section-head"><h2 id="h-rep">Minha reputação</h2><a href="#" data-todo="' + TODO + '">Ver perfil</a></div>' +
+      accordion('acc-rep', 'Minha reputação', 'Nota ' + rep.nota + ' · ' + plural(rep.trabalhos, 'trabalho', 'trabalhos'),
         '<div class="rep-grid">' + repStat(rep.nota, 'Nota geral') + repStat(rep.trabalhos, 'Trabalhos verificados') + repStat(rep.contratariamDeNovo, 'Contratariam de novo') + '</div>' +
-      '</section>' +
+        accMore('Ver perfil'), true) +
 
-      '<section class="section" aria-labelledby="h-vagas">' +
-        '<div class="section-head"><h2 id="h-vagas">Vagas indicadas para você</h2><a href="#" data-todo="' + TODO + '">Ver todas</a></div>' +
+      accordion('acc-vagas', 'Vagas indicadas para você', plural(d.vagasIndicadas.length, 'vaga indicada', 'vagas indicadas'),
         '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Combinam com o seu perfil e são de empresas com reputação no mesmo nível da sua.</span></p>' +
-        vagas +
-      '</section>';
+        vagas + accMore('Ver todas'));
 
     // Simulação do fluxo de confirmação de contratação
     $('#confirm-card').addEventListener('click', function (e) {
@@ -299,8 +324,8 @@
     return '<div class="media"><div class="icon-tile blue">' + icon('check', 22, { stroke: 2 }) + '</div>' +
       '<div class="row-main"><div class="row-title">Confirme sua contratação</div>' +
       '<div class="row-sub">A ' + esc(c.empresa) + ' indicou você como contratado para ' + esc(c.vaga) + '. Ao confirmar, o trabalho entra no seu histórico verificado.</div></div></div>' +
-      '<div class="btn-row"><button type="button" class="btn btn-primary btn-grow" data-confirm="sim">Confirmar</button>' +
-      '<button type="button" class="btn btn-outline btn-grow" data-confirm="nao">Não fui contratado</button></div>';
+      '<div class="btn-row"><button type="button" class="btn btn-primary" data-confirm="sim">Confirmar</button>' +
+      '<button type="button" class="btn btn-outline" data-confirm="nao">Não fui contratado</button></div>';
   }
 
   /* ---------- Início ---------- */

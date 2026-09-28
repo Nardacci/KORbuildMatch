@@ -107,6 +107,15 @@ h1, h2, p { margin: 0; }
 .greeting h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; }
 .greeting p { font-size: 14px; color: var(--muted); }
 
+.greeting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.greeting-row .btn { flex-shrink: 0; }
+
 .stack { display: flex; flex-direction: column; gap: 14px; }
 
 /* ---------- Marca ---------- */
@@ -129,7 +138,8 @@ h1, h2, p { margin: 0; }
 /* ---------- Botões ---------- */
 
 .btn {
-  min-height: 44px;
+  position: relative;
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -139,12 +149,23 @@ h1, h2, p { margin: 0; }
   border: 1px solid transparent;
   font-size: 14px;
   font-weight: 700;
+  line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
   transition: background-color 120ms ease;
 }
 
+/* Botão visualmente com 40px, mas com área de toque de 44px. */
+.btn:not(.btn-lg)::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+}
+
 .btn-lg { min-height: 52px; font-size: 16px; border-radius: 14px; }
+
+/* Botão solto dentro de um card: largura pelo conteúdo, não 100%. */
+.card > .btn { align-self: flex-start; }
 
 .btn-primary { background: var(--blue); color: #FFFFFF; }
 .btn-primary:hover { background: var(--blue-dark); color: #FFFFFF; }
@@ -152,9 +173,7 @@ h1, h2, p { margin: 0; }
 .btn-outline { background: var(--card); color: var(--ink); border-color: var(--line-strong); }
 .btn-outline:hover { background: var(--ground); color: var(--ink); }
 
-.btn-grow { flex-grow: 1; }
-
-.btn-row { display: flex; gap: 8px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .icon-btn {
   position: relative;
@@ -296,11 +315,13 @@ h1, h2, p { margin: 0; }
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  /* espaço para o anel de foco não ser cortado pelo overflow */
+  padding: 4px;
+  margin: -4px;
 }
 
 .filter button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 14px;
   border-radius: 20px;
   border: 1px solid var(--line-strong);
@@ -321,18 +342,6 @@ h1, h2, p { margin: 0; }
 
 /* ---------- Reputação ---------- */
 
-.rep-card {
-  background: var(--ink);
-  color: #FFFFFF;
-  border-radius: 18px;
-  padding: 18px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.rep-card h2 { font-size: 16px; font-weight: 800; }
-.rep-card a { color: #B8CCF5; font-size: 13px; font-weight: 700; text-decoration: none; }
 
 .rep-badge {
   display: flex; align-items: center; gap: 4px;
@@ -348,6 +357,98 @@ h1, h2, p { margin: 0; }
 .rep-value { font-size: 26px; font-weight: 800; }
 .rep-label { font-size: 12px; line-height: 1.35; color: var(--on-dark-muted); }
 .rep-foot { font-size: 12px; line-height: 1.4; color: var(--on-dark-muted); }
+
+/* ---------- Accordion ---------- */
+
+.acc-h { margin: 0; font-size: inherit; }
+
+.acc-btn {
+  width: 100%;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.acc-btn:hover { border-color: var(--line-strong); }
+
+.acc-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.acc-title { font-size: 17px; font-weight: 800; }
+.acc-sum { font-size: 13px; line-height: 1.35; color: var(--muted); }
+
+.acc-arrow {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--muted-2);
+  transition: transform 200ms ease;
+}
+
+.acc.is-open .acc-arrow { transform: rotate(180deg); }
+
+/* Abre e fecha animando a altura (0fr -> 1fr). Fechado, o conteúdo sai da ordem de tabulação. */
+.acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  /* folga lateral para o anel de foco dos itens internos */
+  margin: 0 -6px;
+  transition: grid-template-rows 200ms ease, visibility 0s linear 200ms;
+}
+
+.acc.is-open .acc-panel {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 200ms ease, visibility 0s;
+}
+
+.acc-clip { min-height: 0; overflow: hidden; }
+
+.acc-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 6px 4px;
+}
+
+.acc-more { display: flex; justify-content: flex-end; }
+
+.acc-more a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* Variante escura (reputação) */
+.acc-dark {
+  background: var(--ink);
+  color: #FFFFFF;
+  border-radius: 18px;
+}
+
+.acc-dark .acc-btn {
+  background: transparent;
+  border-color: transparent;
+  color: #FFFFFF;
+  border-radius: 18px;
+}
+
+.acc-dark .acc-sum, .acc-dark .acc-arrow { color: var(--on-dark-muted); }
+.acc-dark .acc-btn:focus-visible { outline-color: #B8CCF5; }
+.acc-dark .acc-panel { margin: 0; }
+.acc-dark .acc-inner { padding: 2px 16px 6px; }
+.acc-dark a { color: #B8CCF5; }
+.acc-dark a:focus-visible { outline-color: #B8CCF5; }
 
 /* ---------- Navegação inferior ---------- */
 
@@ -504,4 +605,5 @@ h1, h2, p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  .acc-arrow { transition: none; }
 }
