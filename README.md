@@ -50,3 +50,7 @@ Observação: no plano gratuito do GitHub, o Pages só funciona com repositório
 ## Privacidade durante a validação
 
 As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o protótipo não apareça no Google. Remova esses bloqueios só no lançamento real.
+
+## Versão do cache
+
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` nos três HTML (por exemplo, `styles.css?v=20260928-2`). A cada publicação que mude CSS ou JS, troque esse valor nos três arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
