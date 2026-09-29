@@ -1892,28 +1892,33 @@
       var curriculo = null; // { nome, tamanho } — o arquivo em si nunca é guardado, nem no protótipo.
       var salPadrao = v.salario || { moeda: 'BRL', periodo: 'mes' };
 
+      // Perguntas de triagem: sempre visíveis e obrigatórias quando a vaga tiver.
       var triagemHtml = (v.perguntasTriagem && v.perguntasTriagem.length)
         ? '<section class="card"><h2 class="card-title">Perguntas da empresa</h2>' +
           v.perguntasTriagem.map(function (pg, i) {
             var opcoes = pg.tipo === 'multipla'
               ? pg.opcoes.map(function (o) { return { id: o, rotulo: o }; })
               : [{ id: 'Sim', rotulo: 'Sim' }, { id: 'Não', rotulo: 'Não' }];
-            return group('triagem-resp-' + i, pg.texto, pills('triagem-resp-' + i, opcoes));
+            return group('triagem-resp-' + i, pg.texto, pills('triagem-resp-' + i, opcoes), { req: true });
           }).join('') + '</section>'
         : '';
 
-      $('#content').innerHTML =
-        '<div class="greeting"><h2 class="page-title">Confirmar candidatura</h2>' +
-          '<p>Você está se candidatando a ' + esc(v.titulo) + ' em ' + esc(e.nome) + '. Vamos usar o perfil que você já preencheu.</p></div>' +
+      // O que já foi preenchido dentro do accordion opcional, para o resumo no cabeçalho fechado.
+      function resumoOpcionaisTexto() {
+        var partes = [];
+        if ($('#mensagem-candidato') && $('#mensagem-candidato').value.trim()) partes.push('Mensagem');
+        if ($('#pret-valor') && $('#pret-valor').value) partes.push('Pretensão');
+        if (curriculo) partes.push('Currículo anexado');
+        return partes.length ? partes.join(' · ') : 'Nenhuma preenchida ainda';
+      }
 
-        triagemHtml +
-
-        '<section class="card"><h2 class="card-title">Mensagem para a empresa (opcional)</h2>' +
+      var opcionaisBody =
+        '<section class="card"><h2 class="card-title">Mensagem para a empresa</h2>' +
           field('mensagem-candidato', 'Mensagem', 'textarea', 'rows="3" maxlength="400"', '',
             { hint: 'Conte brevemente por que você é uma boa escolha.' }) +
         '</section>' +
 
-        '<section class="card"><h2 class="card-title">Pretensão salarial (opcional)</h2>' +
+        '<section class="card"><h2 class="card-title">Pretensão salarial</h2>' +
           '<div class="form-grid">' +
             '<label class="mini"><span>Moeda</span><select id="pret-moeda">' + options(E().formulario.moedas) + '</select></label>' +
             '<label class="mini"><span>Período</span><select id="pret-periodo">' + options(E().formulario.periodos) + '</select></label>' +
@@ -1921,9 +1926,15 @@
           '</div>' +
         '</section>' +
 
-        '<section class="card"><h2 class="card-title">Currículo (opcional)</h2><div id="curriculo-area"></div></section>' +
+        '<section class="card"><h2 class="card-title">Currículo</h2><div id="curriculo-area"></div></section>';
 
-        '<section class="card"><h2 class="card-title">O que mais será enviado</h2>' +
+      $('#content').innerHTML =
+        '<div class="greeting"><h2 class="page-title">Confirmar candidatura</h2>' +
+          '<p>Você está se candidatando a ' + esc(v.titulo) + ' em ' + esc(e.nome) + '. Vamos usar o perfil que você já preencheu.</p></div>' +
+
+        triagemHtml +
+
+        '<section class="card"><h2 class="card-title">O que será enviado</h2>' +
           '<dl class="summary"><div><dt>Nome</dt><dd>' + esc(p.nome) + '</dd></div>' +
             '<div><dt>Resumo</dt><dd>' + esc(p.resumo) + '</dd></div>' +
             '<div><dt>Reputação</dt><dd>Nota ' + esc(p.nota) + ' · ' + p.trabalhos + ' trabalhos verificados</dd></div>' +
@@ -1932,6 +1943,9 @@
             '<div><dt>Idiomas</dt><dd>' + esc(p.idiomas.join(', ')) + '</dd></div>' +
             '<div><dt>Compatibilidade</dt><dd>Atende ' + c.atende + ' de ' + c.total + ' requisitos</dd></div></dl></section>' +
 
+        accordion('acc-opcional', 'Adicionar mais informações (opcional)', 'Nenhuma preenchida ainda', opcionaisBody) +
+
+        '<p class="form-status" id="form-status" role="alert"></p>' +
         '<div class="btn-row form-actions"><button type="button" class="btn btn-primary" id="enviar">Enviar candidatura</button>' +
           '<button type="button" class="btn btn-outline" id="voltar-vaga">Voltar</button></div>' +
         '<div class="visually-hidden" role="status" id="live"></div>';
@@ -1939,6 +1953,13 @@
 
       $('#pret-moeda').value = salPadrao.moeda;
       $('#pret-periodo').value = salPadrao.periodo;
+
+      function atualizarResumoOpcionais() {
+        var el = $('#acc-opcional-sum');
+        if (el) el.textContent = resumoOpcionaisTexto();
+      }
+      $('#mensagem-candidato').addEventListener('input', atualizarResumoOpcionais);
+      $('#pret-valor').addEventListener('input', atualizarResumoOpcionais);
 
       function renderCurriculoArea() {
         var area = $('#curriculo-area');
@@ -1972,18 +1993,25 @@
             say('Currículo anexado: ' + file.name + '.');
           });
         }
+        atualizarResumoOpcionais();
       }
       renderCurriculoArea();
 
       $('#voltar-vaga').addEventListener('click', function () { paint(); window.scrollTo(0, 0); });
       $('#enviar').addEventListener('click', function () {
         var triagemResp = {};
+        var regras = [];
         if (v.perguntasTriagem) {
           v.perguntasTriagem.forEach(function (pg, i) {
             var marcado = document.querySelector('input[name="triagem-resp-' + i + '"]:checked');
             triagemResp[i] = marcado ? marcado.value : null;
+            regras.push({ id: 'triagem-resp-' + i, ok: !!marcado, msg: 'Responda: ' + pg.texto });
           });
         }
+        var ok = check(regras);
+        $('#form-status').textContent = ok ? '' : 'Responda as perguntas da empresa antes de enviar.';
+        if (!ok) return;
+
         var pretVal = $('#pret-valor').value;
         var pretensao = pretVal ? { valor: Number(pretVal), moeda: $('#pret-moeda').value, periodo: $('#pret-periodo').value } : null;
         var mensagem = $('#mensagem-candidato').value.trim();

@@ -391,17 +391,27 @@ var steps = [
   async function () {
     await fresh(); await go('vaga.html?id=atendente-exemplo');
     $('#candidatar').click();
-    L(/Tem disponibilidade para trabalhar aos sábados\?/.test(txt('.content')), 'candidatar: pergunta de triagem aparece: ' + txt('.card-title'));
+    L(/Tem disponibilidade para trabalhar aos sábados\?/.test(txt('.content')), 'candidatar: pergunta de triagem sempre visível (fora do accordion): ' + txt('.card-title'));
     L($$('input[name="triagem-resp-0"]').length === 2, 'candidatar: 2 opcoes (Sim/Nao)');
-    L(!!$('#mensagem-candidato'), 'candidatar: campo de mensagem existe');
+    L(!!$('#acc-opcional-btn'), 'candidatar: accordion "Adicionar mais informações (opcional)" existe');
+    L($('#acc-opcional-btn').getAttribute('aria-expanded') === 'false', 'candidatar: accordion começa fechado');
+    L(txt('#acc-opcional-sum') === 'Nenhuma preenchida ainda', 'candidatar: resumo inicial do accordion: ' + txt('#acc-opcional-sum'));
+    L(!!$('#mensagem-candidato') && !!$('#pret-valor') && !!$('#curriculo-input'), 'candidatar: mensagem/pretensão/currículo estão dentro do accordion');
     L(!!$('#pret-valor') && $('#pret-moeda').value === 'BRL' && $('#pret-periodo').value === 'mes', 'candidatar: pretensao pre-preenchida com moeda/periodo da vaga');
     L(d().body.innerHTML.toLowerCase().indexOf('salário anterior') === -1 && d().body.innerHTML.toLowerCase().indexOf('último salário') === -1, 'candidatar: sem campo de salario anterior/historico');
     L(!!$('#curriculo-input') && $('#curriculo-input').getAttribute('accept').indexOf('pdf') !== -1, 'candidatar: input de arquivo aceita so pdf');
     L(!hasHScroll(), 'candidatar: sem rolagem horizontal');
     L(btnH().length === 0, 'candidatar: botoes 40px ' + JSON.stringify(btnH()));
+    // tenta enviar sem responder a triagem obrigatória
+    $('#enviar').click();
+    L(/Responda as perguntas da empresa/.test(txt('#form-status')), 'candidatar: bloqueia envio sem responder a triagem: ' + txt('#form-status'));
+    L(!$('#triagem-resp-0-err').hidden, 'candidatar: erro aparece na pergunta de triagem');
+    L($('#acc-opcional-btn').getAttribute('aria-expanded') === 'false', 'candidatar: accordion continua fechado após o erro (não precisa abrir para ver o erro)');
   },
-  // 5: anexar arquivo invalido (tipo errado) via arquivo simulado
+  // 5: responde a triagem (obrigatória) e anexa o currículo — accordion nunca é aberto (nenhum clique no cabeçalho)
   async function () {
+    pick('triagem-resp-0', 'Sim');
+    L($('#acc-opcional-btn').getAttribute('aria-expanded') === 'false', 'candidatar: accordion segue fechado só de responder a triagem');
     var input = $('#curriculo-input');
     var txtFile = new File(['conteudo qualquer'], 'curriculo.txt', { type: 'text/plain' });
     var dt = new DataTransfer(); dt.items.add(txtFile); input.files = dt.files;
@@ -418,14 +428,17 @@ var steps = [
     fire(input, 'change');
     L(/meu-curriculo\.pdf/.test(txt('#curriculo-area')) && /1,0 MB/.test(txt('#curriculo-area')), 'candidatar: pdf valido aceito com nome e tamanho: ' + txt('#curriculo-area'));
     L(!!linkByText('Remover'), 'candidatar: opcao de remover aparece');
+    L($('#acc-opcional-btn').getAttribute('aria-expanded') === 'false', 'candidatar: accordion continua fechado após anexar o currículo');
+    L(txt('#acc-opcional-sum') === 'Currículo anexado', 'candidatar: resumo do accordion atualiza mesmo fechado: ' + txt('#acc-opcional-sum'));
   },
-  // 6: responde a triagem, preenche pretensao e envia
+  // 6: preenche mensagem e pretensão (accordion continua fechado o tempo todo) e envia
   async function () {
-    pick('triagem-resp-0', 'Sim');
     set('#mensagem-candidato', 'Tenho experiência com atendimento ao público e disponibilidade total.');
     set('#pret-valor', '2100');
+    L($('#acc-opcional-btn').getAttribute('aria-expanded') === 'false', 'candidatar: accordion ainda fechado com os 3 itens preenchidos (nunca foi clicado)');
+    L(txt('#acc-opcional-sum') === 'Mensagem · Pretensão · Currículo anexado', 'candidatar: resumo mostra os 3 itens: ' + txt('#acc-opcional-sum'));
     $('#enviar').click();
-    L(txt('#done-title') === 'Candidatura enviada', 'candidatar: enviada com sucesso');
+    L(txt('#done-title') === 'Candidatura enviada', 'candidatar: enviada com sucesso — triagem obrigatória respondida e itens opcionais preenchidos sem nunca abrir o accordion');
   },
   // 7: empresa ve a candidatura completa em candidatos.html (joao entra dinamicamente em "atendente")
   async function () {
