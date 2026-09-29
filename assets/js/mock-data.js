@@ -68,7 +68,7 @@
       // "data" = quando se candidatou; usada para o prazo de 7 dias ("Responder até").
       candidatos: {
         recepcionista: [
-          { id: 'joao-silva', atende: 5, status: 'visualizada', data: '2026-09-23' },
+          { id: 'joao-silva', atende: 5, status: 'novo', data: '2026-09-23' },
           { id: 'rafael-lima', atende: 4, status: 'conversa', data: '2026-09-21' },
           { id: 'fernanda-costa', atende: 4, status: 'conversa', data: '2026-09-22' },
           { id: 'juliana-alves', atende: 5, status: 'novo', data: '2026-09-26' },
@@ -571,8 +571,12 @@
       reputacao: { nota: '4,8', trabalhos: 6, contratariamDeNovo: '100%' },
 
       // Contratação em andamento: a mesma vaga que a Empresa Exemplo administra na jornada dela.
-      // O status real (visualizada/em conversa/contratado) é calculado a partir do que aconteceu na sessão.
-      confirmacao: { empresa: 'empresa-exemplo', vaga: 'Recepcionista', vagaId: 'recepcionista' },
+      // O combinado abaixo é o valor padrão, mostrado mesmo sem a empresa passar por preencher-vaga.html;
+      // se ela registrar um combinado na mesma sessão, ele substitui este (mesmo dado, uma só fonte).
+      confirmacao: {
+        empresa: 'empresa-exemplo', vaga: 'Recepcionista', vagaId: 'recepcionista',
+        combinado: combinado('Recepcionista', 'Tempo integral', 'BRL', 'mes', 2100, '2026-10-06', 'Seg a sex, 9h às 18h')
+      },
 
       // Avaliação cega pendente (vínculo anterior)
       avaliacao: { empresa: 'loja-central', prazoDias: 3, combinado: combinado('Atendente', 'Tempo integral', 'BRL', 'mes', 1900, '2025-01-15', 'Seg a sex, 8h às 17h') },
@@ -604,7 +608,7 @@
         ]
       },
 
-      // Etapas do processo seletivo. As três últimas são saídas (o candidato não segue depois delas).
+      // Etapas do processo seletivo. As quatro últimas são saídas (o candidato não segue depois delas).
       etapas: [
         { id: 'enviada', rotulo: 'Enviada' },
         { id: 'visualizada', rotulo: 'Visualizada' },
@@ -612,7 +616,8 @@
         { id: 'contratado', rotulo: 'Contratado' },
         { id: 'nao', rotulo: 'Não selecionado' },
         { id: 'retirada', rotulo: 'Retirada' },
-        { id: 'encerrada', rotulo: 'Vaga encerrada' }
+        { id: 'encerrada', rotulo: 'Vaga encerrada' },
+        { id: 'recusado', rotulo: 'Não contratado' }
       ]
     }
   };

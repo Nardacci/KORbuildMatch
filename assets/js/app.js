@@ -358,7 +358,7 @@
   function q(v) { return encodeURIComponent(v); }
 
   // A contratação que o João Silva confirma (jornada do profissional) é a mesma que a empresa marca.
-  // Devolve null | 'confirmado' | 'contestado' para a vaga da confirmação; null para as demais vagas.
+  // Devolve null | 'confirmado' | 'contestado' | 'recusado' para a vaga da confirmação; null para as demais vagas.
   function confirmacaoDaVaga(vagaId) {
     return vagaId === window.MOCK.profissional.confirmacao.vagaId ? loadP().confirmacao : null;
   }
@@ -367,19 +367,27 @@
     var conf = confirmacaoDaVaga(vagaId);
     return (E().candidatos[vagaId] || []).map(function (c) {
       var st = s.status[vagaId + ':' + c.id] || c.status;
-      if (conf && c.id === PR_ID) st = 'contratado';
+      if (c.id === PR_ID) {
+        if (conf === 'confirmado' || conf === 'contestado') st = 'contratado';
+        else if (conf === 'recusado') st = 'nao';
+      }
       return { id: c.id, atende: c.atende, status: st, data: c.data };
     });
   }
 
-  // Pessoas marcadas como contratadas, aguardando confirmação.
+  // Pessoas marcadas como contratadas, aguardando confirmação (some da lista se a pessoa recusou).
   function preench(s, vagaId) {
     var ids = s.preenchidas[vagaId];
+    if (ids && confirmacaoDaVaga(vagaId) === 'recusado') ids = ids.filter(function (id) { return id !== PR_ID; });
     return ids && ids.length ? ids : null;
   }
 
+  // O combinado registrado pela empresa na sessão, ou o combinado padrão de mock-data.js (a mesma
+  // referência usada no card do profissional mesmo antes de a empresa passar por preencher-vaga.html).
   function combinadoDe(s, vagaId) {
-    return (s.combinados && s.combinados[vagaId]) || null;
+    if (s.combinados && s.combinados[vagaId]) return s.combinados[vagaId];
+    if (vagaId === window.MOCK.profissional.confirmacao.vagaId) return window.MOCK.profissional.confirmacao.combinado;
+    return null;
   }
 
   function combSalario(comb) {
@@ -437,6 +445,9 @@
     }
     if (conf === 'contestado' && v.status !== 'Preenchida') {
       return { status: 'Preenchida · combinado contestado', chip: 'amber', detalhe: prof(PR_ID).nome + ' apontou uma diferença no combinado.' };
+    }
+    if (conf === 'recusado' && v.status !== 'Preenchida') {
+      return { status: 'Aberta', chip: 'amber', detalhe: 'Contratação recusada por ' + prof(PR_ID).nome + '. Escolha outra pessoa.' };
     }
     var ids = preench(s, v.id);
     if (ids && v.status !== 'Preenchida') {
@@ -596,24 +607,35 @@
 
   /* ---------- Confirmação/contestação do combinado (usada na tela inicial e em Minhas candidaturas) ---------- */
 
-  function paintCombinado(container, comb) {
-    function render(mostrarCompose) {
+  // modo: null (padrão) | 'contestar' (compõe a contestação) | 'recusar' (confirma a recusa antes de enviar)
+  function paintCombinado(container, comb, vagaTitulo) {
+    var paraVaga = vagaTitulo ? ' para ' + esc(vagaTitulo) : '';
+    function render(modo) {
       var sp = loadP();
-      var estado = sp.confirmacao === 'confirmado' ? 'confirmado' : (sp.confirmacao === 'contestado' ? 'contestado' : 'pendente');
+      var estado = sp.confirmacao || 'pendente';
       var html;
-      if (mostrarCompose) {
+      if (modo === 'contestar') {
         html = combinadoResumoHtml(comb) +
           field('contestacao-texto', 'O que está diferente do combinado?', 'textarea', 'rows="3" maxlength="300"', '',
             { req: true, hint: 'Conte o que mudou. Isso vai para a empresa revisar.' }) +
           '<div class="btn-row"><button type="button" class="btn btn-primary" data-cf="enviar-contestacao">Enviar contestação</button>' +
-          '<button type="button" class="btn btn-outline" data-cf="cancelar-contestacao">Cancelar</button></div>';
+          '<button type="button" class="btn btn-outline" data-cf="cancelar">Cancelar</button></div>';
+      } else if (modo === 'recusar') {
+        html = '<h3 class="card-title">Confirmar que não foi contratado?</h3>' +
+          '<p class="row-sub">A empresa será avisada' + paraVaga + ', e o vínculo não entra no histórico de ninguém.</p>' +
+          '<div class="btn-row"><button type="button" class="btn btn-primary" data-cf="confirmar-recusa">Sim, não fui contratado</button>' +
+          '<button type="button" class="btn btn-outline" data-cf="cancelar">Cancelar</button></div>';
       } else if (estado === 'pendente') {
         html = '<h3 class="card-title">Confirme a contratação</h3>' + combinadoResumoHtml(comb) +
           '<div class="btn-row"><button type="button" class="btn btn-primary" data-cf="confirmar">Confirmar</button>' +
-          '<button type="button" class="btn btn-outline" data-cf="contestar">Algo está diferente</button></div>';
+          '<button type="button" class="btn btn-outline" data-cf="contestar">Algo está diferente</button>' +
+          '<button type="button" class="btn btn-outline" data-cf="recusar">Não fui contratado</button></div>';
       } else if (estado === 'contestado') {
         html = '<h3 class="card-title">Contestação enviada</h3>' +
           '<p class="row-sub">Você disse: “' + esc(sp.contestacaoTexto || '') + '”. A empresa foi avisada e vai revisar o combinado.</p>';
+      } else if (estado === 'recusado') {
+        html = '<h3 class="card-title">Resposta enviada</h3>' +
+          '<p class="row-sub">Você avisou que não foi contratado' + paraVaga + '. A empresa foi avisada, e o vínculo não entra no histórico.</p>';
       } else {
         html = '<h3 class="card-title">Contratação confirmada</h3>' +
           '<p class="row-sub">O trabalho entra no seu histórico verificado. A avaliação fica disponível ao fim do vínculo.</p>';
@@ -624,21 +646,26 @@
           var act = b.getAttribute('data-cf');
           if (act === 'confirmar') {
             var st = loadP(); st.confirmacao = 'confirmado'; saveP(st);
-            render(false); say('Contratação confirmada.'); atualizarPendTxt();
+            render(null); say('Contratação confirmada.'); atualizarPendTxt();
           } else if (act === 'contestar') {
-            render(true);
-          } else if (act === 'cancelar-contestacao') {
-            render(false);
+            render('contestar');
+          } else if (act === 'recusar') {
+            render('recusar');
+          } else if (act === 'cancelar') {
+            render(null);
           } else if (act === 'enviar-contestacao') {
             var val = container.querySelector('#contestacao-texto').value.trim();
             if (!check([{ id: 'contestacao-texto', ok: val.length > 0, msg: 'Conte o que está diferente antes de enviar.' }])) return;
             var st2 = loadP(); st2.confirmacao = 'contestado'; st2.contestacaoTexto = val; saveP(st2);
-            render(false); say('Contestação enviada.'); atualizarPendTxt();
+            render(null); say('Contestação enviada.'); atualizarPendTxt();
+          } else if (act === 'confirmar-recusa') {
+            var st3 = loadP(); st3.confirmacao = 'recusado'; saveP(st3);
+            render(null); say('Resposta enviada.'); atualizarPendTxt();
           }
         });
       });
     }
-    render(false);
+    render(null);
   }
 
   function atualizarPendTxt() {
@@ -715,6 +742,10 @@
         if (conf === 'contestado') {
           return rowStatic({ icone: 'message', tom: 'amber', titulo: 'Combinado contestado por ' + prof(PR_ID).nome,
             texto: 'Vaga de ' + v.titulo + ' · “' + loadP().contestacaoTexto + '”' });
+        }
+        if (conf === 'recusado') {
+          return rowStatic({ icone: 'message', tom: 'amber', titulo: 'Contratação recusada por ' + prof(PR_ID).nome,
+            texto: 'Vaga de ' + v.titulo + ' · escolha outra pessoa em Minhas vagas.' });
         }
         if (preench(s, p.vaga)) {
           return rowStatic({ icone: 'clock', tom: 'amber', titulo: 'Aguardando confirmação de ' + nomesDe(preench(s, p.vaga)),
@@ -1546,10 +1577,8 @@
 
   function pendTexto(sp) {
     var s = load();
-    var vagaIdEmp = PR().confirmacao.vagaId;
-    var marcados = preench(s, vagaIdEmp);
-    var comb = combinadoDe(s, vagaIdEmp);
-    var temCombinado = marcados && comb && !sp.confirmacao;
+    var comb = combinadoDe(s, PR().confirmacao.vagaId);
+    var temCombinado = comb && !sp.confirmacao;
     var n = (temCombinado ? 1 : 0) + (sp.avaliados[PR().avaliacao.empresa] ? 0 : 1);
     return n === 0 ? 'Nenhuma pendência hoje. Veja as vagas indicadas.'
       : 'Você tem ' + plural(n, 'pendência', 'pendências') + ' e vagas novas indicadas.';
@@ -1560,11 +1589,7 @@
     var rep = d.reputacao;
     var sp = loadP();
     var av = d.avaliacao, avEmpresa = empresaDe(av.empresa);
-    var s = load();
-    var vagaIdEmp = d.confirmacao.vagaId;
-    var marcados = preench(s, vagaIdEmp);
-    var comb = combinadoDe(s, vagaIdEmp);
-    var mostrarCombinado = !!(marcados && comb);
+    var comb = combinadoDe(load(), d.confirmacao.vagaId);
 
     $('#topbar').innerHTML =
       brandMark() +
@@ -1579,7 +1604,7 @@
           texto: 'Prazo termina em ' + plural(av.prazoDias, 'dia', 'dias') + '. Sua avaliação fica oculta até a empresa enviar a dela.',
           href: 'avaliar-empresa.html?id=' + q(av.empresa) });
 
-    var pendItens = (mostrarCombinado ? '<div class="card card-highlight" id="confirm-card" aria-live="polite"></div>' : '') + avaliar;
+    var pendItens = '<div class="card card-highlight" id="confirm-card" aria-live="polite"></div>' + avaliar;
 
     $('#content').innerHTML =
       '<div class="stack"><div class="greeting"><h1>Olá, ' + esc(d.nome) + '</h1>' +
@@ -1599,7 +1624,7 @@
 
       '<div class="visually-hidden" role="status" id="live"></div>';
 
-    if (mostrarCombinado) paintCombinado($('#confirm-card'), comb);
+    paintCombinado($('#confirm-card'), comb, d.confirmacao.vaga);
 
     // Vindo de outra tela, já abre a seção pedida.
     var aba = { vagas: 'acc-vagas', reputacao: 'acc-rep' }[params.get('aba')];
@@ -1715,7 +1740,7 @@
 
   /* ---------- Profissional: minhas candidaturas ---------- */
 
-  var GRUPO = { enviada: 'andamento', visualizada: 'andamento', conversa: 'andamento', contratado: 'contratado', nao: 'encerradas', retirada: 'encerradas', encerrada: 'encerradas' };
+  var GRUPO = { enviada: 'andamento', visualizada: 'andamento', conversa: 'andamento', contratado: 'contratado', nao: 'encerradas', retirada: 'encerradas', encerrada: 'encerradas', recusado: 'encerradas' };
   var GRUPOS = [
     { id: 'andamento', rotulo: 'Em andamento' },
     { id: 'contratado', rotulo: 'Contratado' },
@@ -1739,8 +1764,12 @@
       Object.keys(c).forEach(function (k) { r[k] = c[k]; });
       if (c.vaga === 'recepcionista-exemplo') {
         var vagaIdEmp = PR().confirmacao.vagaId;
-        var marcados = preench(s, vagaIdEmp);
-        if (marcados) { r.status = 'contratado'; r.combinado = combinadoDe(s, vagaIdEmp); }
+        if (sp.confirmacao === 'recusado') {
+          r.status = 'recusado';
+        } else {
+          r.status = 'contratado';
+          r.combinado = combinadoDe(s, vagaIdEmp);
+        }
       }
       return r;
     });
@@ -1749,9 +1778,10 @@
 
   function timelineHtml(c) {
     var ord = ['enviada', 'visualizada', 'conversa'];
-    var saida = c.status === 'nao' || c.status === 'retirada' || c.status === 'encerrada';
+    var saida = c.status === 'nao' || c.status === 'retirada' || c.status === 'encerrada' || c.status === 'recusado';
     var ids, atual;
-    if (saida) { ids = ord.slice(0, ord.indexOf(c.alcancou) + 1).concat(c.status); atual = ids.length - 1; }
+    if (c.status === 'recusado') { ids = ord.concat('contratado', 'recusado'); atual = ids.length - 1; }
+    else if (saida) { ids = ord.slice(0, ord.indexOf(c.alcancou) + 1).concat(c.status); atual = ids.length - 1; }
     else if (c.status === 'contratado') { ids = ord.concat('contratado'); atual = ids.length - 1; }
     else { ids = ord.concat('contratado'); atual = ord.indexOf(c.status); }
     var estado = { done: ' (concluída)', current: ' (etapa atual)', todo: ' (pendente)' };
@@ -1785,6 +1815,9 @@
             : '<div class="btn-row"><a href="avaliar-empresa.html?id=' + q(c.empresa) + '" class="btn btn-primary">Avaliar empresa</a></div>';
         }
       }
+    } else if (c.status === 'recusado') {
+      texto = 'Não contratado'; chip = 'grey';
+      acoesHtml = '<p class="row-sub">Você avisou que não foi contratado para esta vaga. O vínculo não entrou no seu histórico.</p>';
     } else if (c.status === 'conversa') {
       texto = 'Em conversa'; chip = 'blue';
       var ladoDono = c.empresa === 'empresa-exemplo' ? 'ambos' : 'profissional';
@@ -1843,7 +1876,7 @@
       $all('.combinado-slot').forEach(function (slot) {
         var cid = slot.getAttribute('data-slot');
         var candObj = lista.filter(function (x) { return x.id === cid; })[0];
-        if (candObj && candObj.combinado) paintCombinado(slot, candObj.combinado);
+        if (candObj && candObj.combinado) paintCombinado(slot, candObj.combinado, candObj.titulo);
       });
     }
 
