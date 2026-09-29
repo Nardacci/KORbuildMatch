@@ -365,14 +365,101 @@
 
   function candidatosDe(s, vagaId) {
     var conf = confirmacaoDaVaga(vagaId);
-    return (E().candidatos[vagaId] || []).map(function (c) {
+    var lista = (E().candidatos[vagaId] || []).slice();
+
+    // Se o João se candidatou de verdade a esta vaga pelo lado do profissional, e ela ainda não
+    // tinha um candidato fixo para ele no mock, ele entra na lista (mesma sessão, mesma aba).
+    var vagaProfId = window.MOCK.vagaLink[vagaId];
+    if (vagaProfId && !lista.some(function (c) { return c.id === PR_ID; })) {
+      var live = loadP().candidaturas[vagaProfId];
+      if (live) lista.push({ id: PR_ID, atende: compat(vagaJob(vagaProfId)).atende, status: 'novo', data: live.data });
+    }
+
+    return lista.map(function (c) {
       var st = s.status[vagaId + ':' + c.id] || c.status;
       if (c.id === PR_ID) {
         if (conf === 'confirmado' || conf === 'contestado') st = 'contratado';
         else if (conf === 'recusado') st = 'nao';
       }
-      return { id: c.id, atende: c.atende, status: st, data: c.data };
+      return { id: c.id, atende: c.atende, status: st, data: c.data, candidatura: candidaturaDe(vagaId, c.id) };
     });
+  }
+
+  // O que a pessoa enviou ao se candidatar: mensagem, respostas de triagem, pretensão salarial e
+  // currículo. Vem do mock (candidatos fictícios) ou, para o João, do que ele enviou na sessão.
+  function candidaturaDe(vagaEmpresaId, profId) {
+    var mockC = (E().candidatos[vagaEmpresaId] || []).filter(function (c) { return c.id === profId; })[0];
+    var cand = (mockC && mockC.candidatura) || null;
+    if (profId === PR_ID) {
+      var vagaProfId = window.MOCK.vagaLink[vagaEmpresaId];
+      if (vagaProfId) {
+        var live = loadP().candidaturas[vagaProfId];
+        if (live && live.candidatura) cand = live.candidatura;
+      }
+    }
+    return cand;
+  }
+
+  function temCandidatura(cand) {
+    return !!(cand && (cand.mensagem || cand.pretensao || cand.curriculo ||
+      (cand.triagem && Object.keys(cand.triagem).some(function (k) { return cand.triagem[k]; }))));
+  }
+
+  // "Dentro da faixa" / "Acima" / "Abaixo", só quando a pretensão usa a mesma moeda e período da vaga.
+  function faixaIndicador(pret, sal) {
+    if (!sal || !pret || pret.moeda !== sal.moeda || pret.periodo !== sal.periodo) return null;
+    if (pret.valor < sal.min) return { label: 'Abaixo da faixa', tom: 'grey' };
+    if (pret.valor > sal.max) return { label: 'Acima da faixa', tom: 'amber' };
+    return { label: 'Dentro da faixa', tom: 'green' };
+  }
+
+  // Corpo do bloco "Candidatura": mensagem, perguntas de triagem respondidas, pretensão salarial
+  // (com a indicação de faixa) e currículo. Usado tanto no card compacto quanto no perfil completo.
+  function candidaturaCorpoHtml(cand, vagaProf) {
+    var partes = [];
+    if (cand.mensagem) partes.push('<p class="row-sub cand-msg">“' + esc(cand.mensagem) + '”</p>');
+    var perguntas = (vagaProf && vagaProf.perguntasTriagem) || [];
+    if (perguntas.length) {
+      partes.push('<dl class="summary">' + perguntas.map(function (pg, i) {
+        var r = cand.triagem && cand.triagem[i] != null && cand.triagem[i] !== '' ? cand.triagem[i] : 'Não respondida';
+        return '<div><dt>' + esc(pg.texto) + '</dt><dd>' + esc(r) + '</dd></div>';
+      }).join('') + '</dl>');
+    }
+    if (cand.pretensao) {
+      var ind = faixaIndicador(cand.pretensao, vagaProf && vagaProf.salario);
+      partes.push('<div class="chips"><span class="chip' + (ind ? ' ' + ind.tom : '') + '">Pretensão: ' + esc(combSalario(cand.pretensao)) +
+        (ind ? ' · ' + esc(ind.label) : '') + '</span></div>');
+    }
+    if (cand.curriculo) {
+      partes.push('<div class="btn-row"><button type="button" class="btn btn-outline" data-todo="' + TODO + '">' +
+        icon('clipboard', 16, { stroke: 2 }) + 'Ver currículo</button></div>' +
+        '<p class="row-sub cand-arquivo">' + esc(cand.curriculo.nome) + ' · ' + formatBytes(cand.curriculo.tamanho) + '</p>');
+    }
+    return partes.join('');
+  }
+
+  function formatBytes(n) {
+    var mb = n / (1024 * 1024);
+    return mb >= 0.1 ? mb.toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  }
+
+  // Termos de temas proibidos numa pergunta de triagem (idade, gênero, raça, religião, estado civil,
+  // filhos, gravidez, nacionalidade, origem). Devolve os termos encontrados, ou [] se estiver tudo bem.
+  // Só conta como termo quando ele aparece como palavra própria — não dentro de outra palavra
+  // (ex.: "disponibilidade" não pode acionar o termo "idade").
+  var LETRA_PT = /[a-zà-öø-ÿ]/i;
+  function contemComoPalavra(t, termo) {
+    var i = t.indexOf(termo);
+    while (i !== -1) {
+      var antes = t.charAt(i - 1), depois = t.charAt(i + termo.length);
+      if (!LETRA_PT.test(antes) && !LETRA_PT.test(depois)) return true;
+      i = t.indexOf(termo, i + 1);
+    }
+    return false;
+  }
+  function termosProibidosEm(texto) {
+    var t = (texto || '').toLowerCase();
+    return E().formulario.termosProibidosTriagem.filter(function (termo) { return contemComoPalavra(t, termo); });
   }
 
   // Pessoas marcadas como contratadas, aguardando confirmação (some da lista se a pessoa recusou).
@@ -511,14 +598,16 @@
     return esc(p.nome) + (p.verificado ? ' <span style="color:var(--green)">' + icon('check', 16, { stroke: 2.6, label: 'Perfil verificado' }) + '</span>' : '');
   }
 
-  // Cartão de profissional (indicados na tela inicial e candidatos).
-  function profCard(id, atende, de, actions, extra) {
+  // Cartão de profissional (indicados na tela inicial e candidatos). "candBlock" é o bloco
+  // "Candidatura" (mensagem, triagem, pretensão, currículo), quando a pessoa já é candidata.
+  function profCard(id, atende, de, actions, extra, candBlock) {
     var p = prof(id);
     return '<article class="card' + (p.novo ? ' card-new' : '') + '">' +
       '<div class="media center"><div class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
       '<div class="row-main"><div class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</div>' +
       '<div class="row-sub">' + esc(p.resumo) + '</div></div></div>' +
       '<div class="chips"><span class="chip green">Atende ' + atende + ' de ' + de + ' requisitos</span>' + reputacaoChip(p) + (extra || '') + '</div>' +
+      (candBlock ? '<div class="cand-block">' + candBlock + '</div>' : '') +
       actions + '</article>';
   }
 
@@ -545,9 +634,10 @@
       inner + '<p class="field-error" id="' + id + '-err" hidden></p></fieldset>';
   }
 
-  function pills(name, items) {
+  function pills(name, items, selected) {
     return '<div class="pills">' + items.map(function (it) {
-      return '<label class="pill"><input type="radio" name="' + esc(name) + '" value="' + esc(it.id) + '" class="pill-input"><span>' + esc(it.rotulo) + '</span></label>';
+      var checked = selected != null && String(it.id) === String(selected) ? ' checked' : '';
+      return '<label class="pill"><input type="radio" name="' + esc(name) + '" value="' + esc(it.id) + '" class="pill-input"' + checked + '><span>' + esc(it.rotulo) + '</span></label>';
     }).join('') + '</div>';
   }
 
@@ -851,9 +941,29 @@
 
   /* ---------- Empresa: publicar vaga ---------- */
 
+  // Um item da lista de perguntas de triagem, em publicar-vaga.html.
+  // Assinatura (item, i) para bater com o callback de Array.map (elemento primeiro, índice depois).
+  function triagemItemHtml(item, i) {
+    var n = i + 1;
+    var opcoesHtml = [0, 1, 2, 3].map(function (k) {
+      return field('triagem-' + i + '-opcao-' + k, 'Opção ' + (k + 1), 'input',
+        'type="text" maxlength="40" autocomplete="off" data-triagem-i="' + i + '" data-triagem-campo="opcao-' + k + '" value="' + esc(item.opcoes[k] || '') + '"');
+    }).join('');
+    return '<div class="triagem-item">' +
+      '<div class="head-row"><strong>Pergunta ' + n + '</strong>' +
+      '<button type="button" class="chip-x" data-remove-triagem="' + i + '" aria-label="Remover pergunta ' + n + '">' + icon('x', 12, { stroke: 2.4 }) + '</button></div>' +
+      field('triagem-' + i + '-texto', 'Texto da pergunta', 'input',
+        'type="text" maxlength="140" autocomplete="off" placeholder="Ex.: Tem disponibilidade aos sábados?" data-triagem-i="' + i + '" data-triagem-campo="texto" value="' + esc(item.texto) + '"', '', { req: true }) +
+      group('triagem-' + i + '-tipo', 'Tipo de resposta',
+        pills('triagem-' + i + '-tipo', [{ id: 'simnao', rotulo: 'Sim/Não' }, { id: 'multipla', rotulo: 'Múltipla escolha' }], item.tipo), { req: true }) +
+      '<div class="triagem-opcoes"' + (item.tipo !== 'multipla' ? ' hidden' : '') + '>' + opcoesHtml + '</div>' +
+      '</div>';
+  }
+
   function renderPublicar() {
     var f = E().formulario;
     var lista = { competencias: [], idiomas: [] };
+    var triagem = [];
 
     subTopbar('Publicar vaga', 'empresa.html');
     $('#nav').innerHTML = empresaNav('vagas');
@@ -902,6 +1012,11 @@
       field('experiencia', 'Experiência mínima', 'select', '', options(f.experiencias)) +
       field('posicoes', 'Número de posições', 'input', 'type="number" inputmode="numeric" min="1" max="99" value="1"', '', { req: true }) +
 
+      '<div class="field" id="f-triagem-section"><span class="field-label">Perguntas de triagem (opcional, até ' + f.limitePerguntasTriagem + ')</span>' +
+        '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>Não é permitido perguntar sobre idade, gênero, raça, religião, estado civil, filhos, gravidez, nacionalidade ou origem. Nenhuma resposta é eliminatória — você só vê as respostas e decide.</span></p>' +
+        '<div id="triagem-list"></div>' +
+        '<button type="button" class="btn btn-outline" id="triagem-add">Adicionar pergunta</button></div>' +
+
       '<p class="form-status" id="form-status" role="alert"></p>' +
       '<div class="btn-row form-actions"><button type="submit" class="btn btn-primary">Publicar vaga</button>' +
       '<a href="empresa.html" class="btn btn-outline">Cancelar</a></div>' +
@@ -947,6 +1062,42 @@
     });
     $('#idiomas-add').addEventListener('click', addIdioma);
 
+    function renderTriagemList() {
+      $('#triagem-list').innerHTML = triagem.map(triagemItemHtml).join('');
+      $('#triagem-add').hidden = triagem.length >= f.limitePerguntasTriagem;
+    }
+
+    $('#triagem-add').addEventListener('click', function () {
+      if (triagem.length >= f.limitePerguntasTriagem) return;
+      triagem.push({ texto: '', tipo: '', opcoes: ['', '', '', ''] });
+      renderTriagemList();
+      say('Pergunta ' + triagem.length + ' adicionada.');
+      var novo = $('#triagem-' + (triagem.length - 1) + '-texto');
+      if (novo) novo.focus();
+    });
+
+    $('#triagem-list').addEventListener('input', function (e) {
+      var i = e.target.getAttribute('data-triagem-i'), campo = e.target.getAttribute('data-triagem-campo');
+      if (i == null || !campo) return;
+      if (campo === 'texto') triagem[i].texto = e.target.value;
+      else if (campo.indexOf('opcao-') === 0) triagem[i].opcoes[Number(campo.split('-')[1])] = e.target.value;
+    });
+
+    $('#triagem-list').addEventListener('change', function (e) {
+      var m = e.target.name && e.target.name.match(/^triagem-(\d+)-tipo$/);
+      if (!m) return;
+      triagem[Number(m[1])].tipo = e.target.value;
+      renderTriagemList();
+    });
+
+    $('#triagem-list').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-remove-triagem]');
+      if (!b) return;
+      triagem.splice(Number(b.getAttribute('data-remove-triagem')), 1);
+      renderTriagemList();
+      say('Pergunta removida.');
+    });
+
     form.addEventListener('click', function (e) {
       var x = e.target.closest('.chip-x');
       if (!x) return;
@@ -972,6 +1123,24 @@
       var salOk = (!min || Number(min) >= 0) && (!max || Number(max) >= 0) && !(min && max && Number(min) > Number(max));
       var n = Number($('#posicoes').value);
 
+      var triagemRules = [];
+      triagem.forEach(function (item, i) {
+        var termosTexto = termosProibidosEm(item.texto);
+        var msgTexto = item.texto.trim().length < 5 ? 'Escreva a pergunta (pelo menos 5 letras).'
+          : (termosTexto.length ? 'Essa pergunta não pode falar sobre: ' + termosTexto.join(', ') + '. Reescreva sem citar esses temas.' : '');
+        triagemRules.push({ id: 'triagem-' + i + '-texto', ok: !msgTexto, msg: msgTexto });
+        triagemRules.push({ id: 'triagem-' + i + '-tipo', ok: !!item.tipo, msg: 'Escolha Sim/Não ou múltipla escolha.' });
+        if (item.tipo === 'multipla') {
+          var preenchidas = item.opcoes.filter(function (o) { return o.trim(); });
+          triagemRules.push({ id: 'triagem-' + i + '-opcao-0', ok: preenchidas.length >= 2, msg: 'Adicione pelo menos 2 opções.' });
+          item.opcoes.forEach(function (o, k) {
+            if (!o.trim()) return;
+            var termosOpcao = termosProibidosEm(o);
+            if (termosOpcao.length) triagemRules.push({ id: 'triagem-' + i + '-opcao-' + k, ok: false, msg: 'Essa opção não pode falar sobre: ' + termosOpcao.join(', ') + '.' });
+          });
+        }
+      });
+
       var ok = check([
         { id: 'titulo', ok: val('titulo').length >= 3, msg: 'Informe o título da vaga (pelo menos 3 letras).' },
         { id: 'descricao', ok: val('descricao').length >= 20, msg: 'Descreva a vaga com pelo menos 20 caracteres.' },
@@ -981,7 +1150,7 @@
         { id: 'tipo', ok: !!val('tipo'), msg: 'Escolha o tipo de contratação.' },
         { id: 'salario', ok: salOk, msg: 'Confira a faixa salarial: o mínimo não pode ser maior que o máximo, e os valores não podem ser negativos.' },
         { id: 'posicoes', ok: n >= 1 && n <= 99 && Math.floor(n) === n, msg: 'Informe quantas posições a vaga tem (de 1 a 99).' }
-      ]);
+      ].concat(triagemRules));
       $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
       if (!ok) return;
 
@@ -1001,7 +1170,10 @@
           salario: salarioTexto(val('moeda') || $('#moeda').value, $('#periodo').value, min, max),
           competencias: lista.competencias.slice(),
           idiomas: lista.idiomas.slice(),
-          experiencia: val('experiencia')
+          experiencia: val('experiencia'),
+          perguntasTriagem: triagem.filter(function (t) { return t.texto.trim(); }).map(function (t) {
+            return { texto: t.texto.trim(), tipo: t.tipo, opcoes: t.tipo === 'multipla' ? t.opcoes.filter(function (o) { return o.trim(); }) : [] };
+          })
         }
       };
       s.vagas.unshift(v);
@@ -1029,6 +1201,7 @@
       '<div><dt>Experiência mínima</dt><dd>' + esc(d.experiencia) + '</dd></div>' +
       (d.competencias.length ? '<div><dt>Competências</dt><dd>' + esc(d.competencias.join(', ')) + '</dd></div>' : '') +
       (d.idiomas.length ? '<div><dt>Idiomas</dt><dd>' + esc(d.idiomas.join(', ')) + '</dd></div>' : '') +
+      (d.perguntasTriagem.length ? '<div><dt>Perguntas de triagem</dt><dd>' + esc(d.perguntasTriagem.map(function (t) { return t.texto; }).join(' · ')) + '</dd></div>' : '') +
       '</dl>';
     showDone({
       icone: 'check',
@@ -1114,9 +1287,11 @@
             '<select data-cand="' + esc(c.id) + '">' + E().statusCandidato.filter(function (st) { return st.manual !== false; }).map(function (st) {
               return '<option value="' + st.id + '"' + (st.id === c.status ? ' selected' : '') + '>' + esc(st.singular) + '</option>';
             }).join('') + '</select></label>';
+          var vagaProf = window.MOCK.vagaLink[v.id] && vagaJob(window.MOCK.vagaLink[v.id]);
+          var candBlock = temCandidatura(c.candidatura) ? candidaturaCorpoHtml(c.candidatura, vagaProf) : '';
           return profCard(c.id, c.atende, requisitosDe(v),
             '<div class="btn-row"><a href="' + esc(perfilHref(c.id, v.id)) + '" class="btn btn-primary">Ver perfil</a>' +
-            '<button type="button" class="btn btn-outline" data-conversar="' + esc(c.id) + '">Conversar</button>' + seletor + '</div>', extra);
+            '<button type="button" class="btn btn-outline" data-conversar="' + esc(c.id) + '">Conversar</button>' + seletor + '</div>', extra, candBlock);
         }).join('');
       }
       $('#cand-list').innerHTML = html;
@@ -1193,11 +1368,18 @@
     var conviteKey = vaga ? vaga.id + ':' + id : '';
 
     // Compatibilidade com a vaga, quando a pessoa é candidata ou indicada dela.
+    var candidatoObj = vaga ? candidatosDe(s, vaga.id).filter(function (c) { return c.id === id; })[0] : null;
     var atende = null;
     if (vaga) {
-      var achado = candidatosDe(s, vaga.id).concat(indicadosDe(s, vaga) || []).filter(function (c) { return c.id === id; })[0];
+      var achado = candidatoObj || (indicadosDe(s, vaga) || []).filter(function (c) { return c.id === id; })[0];
       if (achado) atende = achado.atende;
     }
+
+    // Bloco "Candidatura", só quando a pessoa é candidata de fato (não apenas indicada) e enviou algo.
+    var vagaProf = vaga && window.MOCK.vagaLink[vaga.id] && vagaJob(window.MOCK.vagaLink[vaga.id]);
+    var candSection = (candidatoObj && temCandidatura(candidatoObj.candidatura))
+      ? '<section class="section"><h2>Candidatura</h2>' + candidaturaCorpoHtml(candidatoObj.candidatura, vagaProf) + '</section>'
+      : '';
 
     var reputacao = p.novo
       ? '<div class="card"><div class="chips">' + reputacaoChip(p) + '</div>' +
@@ -1224,6 +1406,8 @@
         '<button type="button" class="btn btn-outline" id="msg-btn">Enviar mensagem</button></div>' +
         (vaga ? '<p class="row-sub">Vaga do convite: ' + esc(vaga.titulo) + '</p>' : '') +
       '</section>' +
+
+      candSection +
 
       '<section class="section"><h2>Reputação</h2>' + reputacao + '</section>' +
 
@@ -1705,10 +1889,41 @@
     // Passo único de confirmação, com o resumo do que será enviado.
     function resumo() {
       var p = prof(PR().id);
+      var curriculo = null; // { nome, tamanho } — o arquivo em si nunca é guardado, nem no protótipo.
+      var salPadrao = v.salario || { moeda: 'BRL', periodo: 'mes' };
+
+      var triagemHtml = (v.perguntasTriagem && v.perguntasTriagem.length)
+        ? '<section class="card"><h2 class="card-title">Perguntas da empresa</h2>' +
+          v.perguntasTriagem.map(function (pg, i) {
+            var opcoes = pg.tipo === 'multipla'
+              ? pg.opcoes.map(function (o) { return { id: o, rotulo: o }; })
+              : [{ id: 'Sim', rotulo: 'Sim' }, { id: 'Não', rotulo: 'Não' }];
+            return group('triagem-resp-' + i, pg.texto, pills('triagem-resp-' + i, opcoes));
+          }).join('') + '</section>'
+        : '';
+
       $('#content').innerHTML =
         '<div class="greeting"><h2 class="page-title">Confirmar candidatura</h2>' +
           '<p>Você está se candidatando a ' + esc(v.titulo) + ' em ' + esc(e.nome) + '. Vamos usar o perfil que você já preencheu.</p></div>' +
-        '<section class="card"><h2 class="card-title">O que será enviado</h2>' +
+
+        triagemHtml +
+
+        '<section class="card"><h2 class="card-title">Mensagem para a empresa (opcional)</h2>' +
+          field('mensagem-candidato', 'Mensagem', 'textarea', 'rows="3" maxlength="400"', '',
+            { hint: 'Conte brevemente por que você é uma boa escolha.' }) +
+        '</section>' +
+
+        '<section class="card"><h2 class="card-title">Pretensão salarial (opcional)</h2>' +
+          '<div class="form-grid">' +
+            '<label class="mini"><span>Moeda</span><select id="pret-moeda">' + options(E().formulario.moedas) + '</select></label>' +
+            '<label class="mini"><span>Período</span><select id="pret-periodo">' + options(E().formulario.periodos) + '</select></label>' +
+            '<label class="mini"><span>Valor</span><input id="pret-valor" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>' +
+          '</div>' +
+        '</section>' +
+
+        '<section class="card"><h2 class="card-title">Currículo (opcional)</h2><div id="curriculo-area"></div></section>' +
+
+        '<section class="card"><h2 class="card-title">O que mais será enviado</h2>' +
           '<dl class="summary"><div><dt>Nome</dt><dd>' + esc(p.nome) + '</dd></div>' +
             '<div><dt>Resumo</dt><dd>' + esc(p.resumo) + '</dd></div>' +
             '<div><dt>Reputação</dt><dd>Nota ' + esc(p.nota) + ' · ' + p.trabalhos + ' trabalhos verificados</dd></div>' +
@@ -1716,14 +1931,68 @@
             '<div><dt>Competências</dt><dd>' + esc(p.competencias.join(', ')) + '</dd></div>' +
             '<div><dt>Idiomas</dt><dd>' + esc(p.idiomas.join(', ')) + '</dd></div>' +
             '<div><dt>Compatibilidade</dt><dd>Atende ' + c.atende + ' de ' + c.total + ' requisitos</dd></div></dl></section>' +
+
         '<div class="btn-row form-actions"><button type="button" class="btn btn-primary" id="enviar">Enviar candidatura</button>' +
-          '<button type="button" class="btn btn-outline" id="voltar-vaga">Voltar</button></div>';
+          '<button type="button" class="btn btn-outline" id="voltar-vaga">Voltar</button></div>' +
+        '<div class="visually-hidden" role="status" id="live"></div>';
       window.scrollTo(0, 0);
+
+      $('#pret-moeda').value = salPadrao.moeda;
+      $('#pret-periodo').value = salPadrao.periodo;
+
+      function renderCurriculoArea() {
+        var area = $('#curriculo-area');
+        if (curriculo) {
+          area.innerHTML = '<div class="file-chip"><span class="file-name">' + icon('clipboard', 18, { stroke: 2 }) +
+            esc(curriculo.nome) + ' · ' + formatBytes(curriculo.tamanho) + '</span>' +
+            '<button type="button" class="btn btn-outline" id="curriculo-remover">Remover</button></div>';
+          $('#curriculo-remover').addEventListener('click', function () {
+            curriculo = null;
+            renderCurriculoArea();
+            say('Currículo removido.');
+          });
+        } else {
+          area.innerHTML = '<label class="btn btn-outline file-btn" for="curriculo-input">' + icon('clipboard', 16, { stroke: 2 }) + 'Anexar currículo (PDF)</label>' +
+            '<input type="file" id="curriculo-input" accept="application/pdf,.pdf" class="visually-hidden">' +
+            '<p class="field-error" id="curriculo-err" hidden></p>';
+          $('#curriculo-input').addEventListener('change', function (ev) {
+            var file = ev.target.files[0];
+            if (!file) return;
+            var errEl = $('#curriculo-err');
+            var ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+            if (!ehPdf) {
+              errEl.hidden = false; errEl.textContent = 'Envie um arquivo em PDF.'; ev.target.value = ''; return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+              errEl.hidden = false; errEl.textContent = 'O arquivo deve ter até 5 MB (este tem ' + formatBytes(file.size) + ').'; ev.target.value = ''; return;
+            }
+            errEl.hidden = true;
+            curriculo = { nome: file.name, tamanho: file.size };
+            renderCurriculoArea();
+            say('Currículo anexado: ' + file.name + '.');
+          });
+        }
+      }
+      renderCurriculoArea();
 
       $('#voltar-vaga').addEventListener('click', function () { paint(); window.scrollTo(0, 0); });
       $('#enviar').addEventListener('click', function () {
+        var triagemResp = {};
+        if (v.perguntasTriagem) {
+          v.perguntasTriagem.forEach(function (pg, i) {
+            var marcado = document.querySelector('input[name="triagem-resp-' + i + '"]:checked');
+            triagemResp[i] = marcado ? marcado.value : null;
+          });
+        }
+        var pretVal = $('#pret-valor').value;
+        var pretensao = pretVal ? { valor: Number(pretVal), moeda: $('#pret-moeda').value, periodo: $('#pret-periodo').value } : null;
+        var mensagem = $('#mensagem-candidato').value.trim();
+
         var sp = loadP();
-        sp.candidaturas[v.id] = { data: hojeISO(), status: 'enviada' };
+        sp.candidaturas[v.id] = {
+          data: hojeISO(), status: 'enviada',
+          candidatura: { mensagem: mensagem || null, triagem: triagemResp, pretensao: pretensao, curriculo: curriculo }
+        };
         saveP(sp);
         showDone({
           icone: 'check',

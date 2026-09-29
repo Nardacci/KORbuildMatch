@@ -1161,3 +1161,69 @@ fieldset.group > legend { padding: 0; margin-bottom: 8px; font-size: 13px; font-
   padding: 0;
   border-radius: 20px;
 }
+
+/* ==========================================================================
+   Triagem, pretensão salarial, currículo e bloco "Candidatura"
+   ========================================================================== */
+
+.triagem-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  margin-top: 12px;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.triagem-item .head-row { align-items: center; }
+.triagem-item .head-row strong { font-size: 14px; }
+
+.triagem-opcoes { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- Anexar currículo ---------- */
+
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--ground);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- Bloco "Candidatura" (candidatos.html e perfil-profissional.html) ---------- */
+
+.cand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.cand-msg { font-style: italic; }
+.cand-arquivo { margin-top: -6px; }

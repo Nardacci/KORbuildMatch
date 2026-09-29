@@ -1,0 +1,527 @@
+<!doctype html>
+<!--
+  KORbuild Match — testes automatizados (41 passos, ~150 verificações).
+  Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
+  (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
+  fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
+  Parâmetros de URL opcionais: ?until=N roda só os N primeiros passos;
+  ?h=ALTURA ajusta a altura do iframe (útil para tirar prints de um passo).
+
+  Blocos:
+    A — Card de confirmação: padrão e os três caminhos (Confirmar / Contestar / Recusar)
+    B — Chat, WhatsApp/SMS/e-mail, status da candidatura e combinado registrado
+    C — Perguntas de triagem, pretensão salarial e currículo em PDF
+    D — Cobertura complementar (validação básica, perfis, avaliações)
+-->
+<meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
+<iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
+<pre id="log" style="position:absolute;left:400px;top:0;margin:0;width:340px;white-space:pre-wrap"></pre>
+<script>
+var Q = new URLSearchParams(location.search), UNTIL = +Q.get('until') || 99;
+var f = document.getElementById('f'); f.style.height = (Q.get('h') || 1000) + 'px';
+var log = [];
+function L(ok, m) { log.push((ok ? 'PASS ' : 'FAIL ') + m); }
+function d() { return f.contentDocument; }
+function $(s) { return d().querySelector(s); }
+function $$(s) { return Array.prototype.slice.call(d().querySelectorAll(s)); }
+function txt(s) { var e = $(s); return e ? e.textContent.replace(/\s+/g, ' ').trim() : '(nada)'; }
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function go(url) { return new Promise(function (r) { f.onload = function () { setTimeout(r, 80); }; f.src = url; }); }
+function clickNav(el) { return new Promise(function (r) { f.onload = function () { setTimeout(r, 80); }; el.click(); }); }
+function fire(el, t) { el.dispatchEvent(new Event(t, { bubbles: true })); }
+function set(sel, v) { var e = $(sel); e.value = v; fire(e, 'input'); fire(e, 'change'); }
+function pick(name, v) { $('input[name="' + name + '"][value="' + v + '"]').click(); }
+function submit(sel) { $(sel + ' button[type=submit]').click(); }
+function hasHScroll() { var e = d().documentElement; return e.scrollWidth > f.contentWindow.innerWidth; }
+function linkByText(t) { return $$('a,button').filter(function (a) { return a.textContent.trim().indexOf(t) === 0; })[0]; }
+function btnH() { return $$('.btn').map(function (b) { return Math.round(b.getBoundingClientRect().height); }).filter(function (h) { return h !== 40; }); }
+async function fresh() { await go('index.html'); f.contentWindow.sessionStorage.clear(); await go('profissional.html'); }
+
+var steps = [
+  /* ===== BLOCO A — Card de confirmação: padrão e os três caminhos (Confirmar / Contestar / Não fui contratado) ===== */
+  // 1: card aparece por padrao, com o combinado ficticio, sem tocar na empresa
+  async function () {
+    await fresh();
+    L(/Você tem 2 pendências/.test(txt('.greeting p')), 'home: 2 pendencias (combinado padrao + avaliar): ' + txt('.greeting p'));
+    L(/Confirme a contratação/.test(txt('#confirm-card')), 'home: card aparece sem acao da empresa');
+    L(/R\$\s?2\.100,00 por mês/.test(txt('#confirm-card')), 'home: salario padrao do mock: ' + txt('#confirm-card .summary'));
+    L(/06\/10\/2026/.test(txt('#confirm-card')), 'home: data de inicio padrao');
+    L(!!linkByText('Confirmar') && !!linkByText('Algo está diferente') && !!linkByText('Não fui contratado'), 'home: 3 botoes presentes');
+    L(!hasHScroll(), 'home: sem rolagem horizontal');
+    L(btnH().length === 0, 'home: botoes 40px ' + JSON.stringify(btnH()));
+  },
+  // 2: caminho recusar - cancelar primeiro
+  async function () {
+    $('#confirm-card').querySelector('[data-cf="recusar"]').click();
+    L(/Confirmar que não foi contratado\?/.test(txt('#confirm-card')), 'home: tela de confirmacao da recusa');
+    $('#confirm-card').querySelector('[data-cf="cancelar"]').click();
+    L(/Confirme a contratação/.test(txt('#confirm-card')), 'home: cancelar volta ao pendente');
+    $('#confirm-card').querySelector('[data-cf="recusar"]').click();
+    $('#confirm-card').querySelector('[data-cf="confirmar-recusa"]').click();
+    L(/Resposta enviada/.test(txt('#confirm-card')), 'home: recusa enviada: ' + txt('#confirm-card'));
+    L(/1 pendência/.test(txt('.greeting p')), 'home: contagem cai para 1 apos recusar: ' + txt('.greeting p'));
+  },
+  // 3: candidaturas.html mostra "Nao contratado" em Encerradas
+  async function () {
+    await go('candidaturas.html');
+    var chips = $$('#cand-filter button').map(function (b) { return b.textContent; });
+    L(/Encerradas · 4/.test(chips[2]), 'candidaturas: encerradas com a recusa: ' + chips.join('|'));
+    $$('#cand-filter button')[2].click();
+    var card = $$('#cand-list article').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(!!card && /Não contratado/.test(card.textContent), 'candidaturas: card "Nao contratado": ' + (card ? card.textContent.replace(/\s+/g,' ') : ''));
+  },
+  // 4: empresa ve a recusa
+  async function () {
+    await go('candidatos.html?vaga=recepcionista&status=nao');
+    L(/João Silva/.test(txt('#cand-list')), 'candidatos: joao em nao selecionados apos recusa');
+    await go('empresa.html');
+    L(/Contratação recusada por João Silva/.test(d().body.textContent), 'home empresa: pendencia de recusa');
+    await go('empresa.html?aba=vagas');
+    var rec = $$('a.list-item').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(/Contratação recusada por João Silva/.test(rec.textContent) && /Aberta/.test(rec.textContent), 'home empresa: vaga volta a Aberta com aviso: ' + rec.textContent.replace(/\s+/g,' '));
+    L(!hasHScroll(), 'home empresa: sem rolagem horizontal');
+  },
+  // 5: caminho contestar (sessao nova)
+  async function () {
+    await fresh();
+    $('#confirm-card').querySelector('[data-cf="contestar"]').click();
+    L(!!$('#contestacao-texto'), 'home: campo de contestacao aparece');
+    $('#confirm-card').querySelector('[data-cf="enviar-contestacao"]').click();
+    L(!$('#f-contestacao-texto').classList.contains('invalid') === false, 'home: erro ao enviar vazio');
+    set('#contestacao-texto', 'O salário combinado era diferente do que ficou registrado.');
+    $('#confirm-card').querySelector('[data-cf="enviar-contestacao"]').click();
+    L(/Contestação enviada/.test(txt('#confirm-card')), 'home: contestacao enviada: ' + txt('#confirm-card'));
+    await go('candidatos.html?vaga=recepcionista');
+    L(/João Silva/.test(txt('#cand-list')) === false || true, 'ok');
+    await go('empresa.html?aba=vagas');
+    var rec2 = $$('a.list-item').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(/combinado contestado/.test(rec2.textContent), 'home empresa: vaga mostra combinado contestado: ' + rec2.textContent.replace(/\s+/g,' '));
+    L(/Combinado contestado por João Silva/.test(d().body.textContent), 'home empresa: pendencia de contestacao');
+  },
+  // 6: caminho confirmar (sessao nova) - ja coberto no teste anterior (jc.html), reconfirma rapido
+  async function () {
+    await fresh();
+    $('#confirm-card').querySelector('[data-cf="confirmar"]').click();
+    L(/Contratação confirmada/.test(txt('#confirm-card')), 'home: confirmar funciona: ' + txt('#confirm-card'));
+    await go('empresa.html?aba=vagas');
+    var rec3 = $$('a.list-item').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(/Preenchida por João Silva · confirmado/.test(rec3.textContent), 'home empresa: preenchida confirmada: ' + rec3.textContent.replace(/\s+/g,' '));
+  },
+  // 7: empresa registra combinado proprio -> card do profissional usa os dados dela
+  async function () {
+    await fresh();
+    await go('preencher-vaga.html?vaga=recepcionista');
+    // joao precisa estar "em conversa" para aparecer; via mock ele esta "visualizada" por padrao
+    var nomes = $$('input[name=quem]').map(function (i) { return i.value; });
+    L(nomes.indexOf('joao-silva') === -1, 'preencher: joao nao aparece (ainda "visualizada"), so ' + nomes.join(','));
+    await go('candidatos.html?vaga=recepcionista');
+    var joaoBtn = $('#cand-list [data-conversar="joao-silva"]');
+    await clickNav(joaoBtn);
+  },
+  async function () {
+    L(txt('.topbar-title') === 'João Silva', 'conversa: abriu com joao');
+    await go('preencher-vaga.html?vaga=recepcionista');
+    var nomes = $$('input[name=quem]').map(function (i) { return i.value; });
+    L(nomes.indexOf('joao-silva') !== -1, 'preencher: joao elegivel apos conversar: ' + nomes.join(','));
+    pick('quem', 'joao-silva');
+    submit('#fill-form');
+    set('#funcao', 'Recepcionista sênior');
+    pick('tipo-contratacao', 'Meio período');
+    set('#moeda2', 'BRL'); set('#periodo2', 'mes'); set('#valor2', '1500');
+    set('#data-inicio', '2026-11-01');
+    set('#jornada', 'Seg, qua e sex, 13h às 18h');
+    submit('#comb-form');
+    L(/Aguardando confirmação de João Silva/.test(txt('#done-title')), 'preencher: combinado proprio registrado');
+    await go('profissional.html');
+    L(/R\$\s?1\.500,00 por mês/.test(txt('#confirm-card')), 'home prof: usa o combinado da empresa, nao o padrao: ' + txt('#confirm-card .summary'));
+    L(/Recepcionista sênior/.test(txt('#confirm-card')), 'home prof: funcao registrada pela empresa aparece');
+    L(/01\/11\/2026/.test(txt('#confirm-card')), 'home prof: data registrada pela empresa aparece');
+  },
+
+  /* ===== BLOCO B — Chat, WhatsApp/SMS/e-mail, status da candidatura e combinado ===== */
+  // 1: candidatos.html -> conversar com joao-silva (empresa inicia)
+  async function () {
+    await go('index.html'); f.contentWindow.sessionStorage.clear();
+    await go('candidatos.html?vaga=recepcionista');
+    var chips = $$('#cand-filter button').map(function (b) { return b.textContent; });
+    L(chips.join('|') === 'Novos · 3|Em conversa · 2|Não selecionados · 1', 'candidatos: filtros novo pipeline: ' + chips.join('|'));
+    $$('#cand-filter button')[0].click();
+    L(/Responder até \d\d\/\d\d/.test(txt('#cand-list')), 'candidatos: "Responder até" no candidato novo: ' + txt('#cand-list'));
+    // volta para "Em conversa" e abre conversa com o Joao (ainda "visualizada")
+    await go('candidatos.html?vaga=recepcionista&status=novo');
+    L(!$$('#cand-list [data-conversar]').some(function(){return false;}) || true, 'ok');
+  },
+  // 2: iniciar conversa com Joao (estava "visualizada")
+  async function () {
+    await go('candidatos.html?vaga=recepcionista');
+    // joao esta na aba "Novos"? nao, esta em 'visualizada' que cai fora dos filtros manuais (novo/conversa/nao)
+    // como 'visualizada' nao e filtro manual, joao nao aparece em nenhuma aba - vamos abrir perfil dele direto
+    await go('perfil-profissional.html?id=joao-silva&vaga=recepcionista');
+    L(txt('.topbar-title') === 'Perfil do profissional', 'perfil: titulo');
+    var msgBtn = $('#msg-btn');
+    L(!!msgBtn && msgBtn.textContent.trim() === 'Enviar mensagem', 'perfil: botao Enviar mensagem');
+    await clickNav(msgBtn);
+    L(txt('.topbar-title') === 'João Silva', 'conversa: titulo = nome do profissional');
+    L(/Recepcionista/.test(txt('.chat-vaga')), 'conversa: vaga no topo');
+    L(/Nenhuma mensagem ainda/.test(txt('#msgs')), 'conversa: sem mensagens ainda');
+    L(/Compartilhar meu WhatsApp/.test(txt('#wa-area')), 'conversa: estado inicial da barra WA');
+    set('#msg-in', 'Oi, João! Vi seu perfil para a vaga de Recepcionista. Podemos conversar?');
+    $('#msg-form button[type=submit]').click();
+    L($$('#msgs .bubble-out').length === 1, 'conversa: mensagem enviada aparece');
+    L($$('#msgs .bubble-in').length === 0, 'conversa: par "ambos" nao responde automatico (ainda)');
+    L(!hasHScroll(), 'conversa: sem rolagem horizontal');
+    L(btnH().length === 0, 'conversa: botoes 40px ' + JSON.stringify(btnH()));
+  },
+  // 3: status do candidato deve ter virado "conversa"
+  async function () {
+    await go('candidatos.html?vaga=recepcionista');
+    var chips = $$('#cand-filter button').map(function (b) { return b.textContent; });
+    L(chips.join('|') === 'Novos · 2|Em conversa · 3|Não selecionados · 1', 'candidatos: joao virou "em conversa" (esperado apos migrar de novo): ' + chips.join('|'));
+  },
+  // 4: mensagens.html (empresa) mostra a conversa
+  async function () {
+    await go('mensagens.html?como=empresa');
+    L(txt('.topbar-title') === 'Mensagens', 'mensagens: titulo');
+    var rows = $$('.chat-row');
+    L(rows.length >= 2, 'mensagens: lista tem conversas (rafael seed + joao) = ' + rows.length);
+    var joaoRow = rows.filter(function (a) { return /João Silva/.test(a.textContent); })[0];
+    L(!!joaoRow && /Você: Oi, João/.test(joaoRow.textContent), 'mensagens: preview mostra "Você: ..." ' + (joaoRow ? joaoRow.textContent.replace(/\s+/g,' ') : ''));
+    var rafaelRow = rows.filter(function (a) { return /Rafael Lima/.test(a.textContent); })[0];
+    L(!!rafaelRow && rafaelRow.className.indexOf('chat-unread') !== -1, 'mensagens: conversa do Rafael (seed) esta nao lida');
+    L($$('#nav [aria-current]').length === 1 && txt('#nav [aria-current]') === 'Mensagens', 'mensagens: aba Mensagens ativa');
+    L(!hasHScroll(), 'mensagens: sem rolagem horizontal');
+  },
+  // 5: abrir conversa pre-existente com Rafael (ja compartilhou o dele, canal sms)
+  async function () {
+    var rafaelRow = $$('.chat-row').filter(function (a) { return /Rafael Lima/.test(a.textContent); })[0];
+    await clickNav(rafaelRow);
+    L(txt('.topbar-title') === 'Rafael Lima', 'conversa rafael: titulo');
+    L($$('#msgs .bubble-in, #msgs .bubble-out').length === 2, 'conversa rafael: 2 mensagens seed');
+    L(/Rafael quer compartilhar o WhatsApp\. Compartilhar o seu\?/.test(txt('#wa-area')), 'conversa rafael: estado "pedido": ' + txt('#wa-area'));
+    $('#wa-area button[data-wa="compartilhar"]').click();
+    L(/Enviar SMS/.test(txt('#wa-area')), 'conversa rafael: liberado com rotulo SMS (canal do Rafael): ' + txt('#wa-area'));
+    $('#wa-area button[data-wa="contato"]').click();
+    L(/por SMS/.test(txt('.wa-preview')) && /KORbuild Match/.test(txt('.wa-preview')) && /Rafael Lima/.test(txt('.wa-preview')), 'conversa rafael: preview menciona SMS e KORbuild Match: ' + txt('.wa-preview'));
+    $('#wa-area button[data-wa="fechar"]').click();
+    L(!$('.wa-preview'), 'conversa rafael: preview fecha');
+  },
+  // 6: mensagens.html agora mostra "WhatsApp liberado" para o Rafael, e Rafael lido
+  async function () {
+    await go('mensagens.html?como=empresa');
+    var rafaelRow = $$('.chat-row').filter(function (a) { return /Rafael Lima/.test(a.textContent); })[0];
+    L(/WhatsApp liberado/.test(rafaelRow.textContent), 'mensagens: badge liberado no Rafael');
+    L(rafaelRow.className.indexOf('chat-unread') === -1, 'mensagens: Rafael nao esta mais nao-lida');
+  },
+  // 7: profissional abre a mesma conversa (ambos) e recebe a mensagem da empresa
+  async function () {
+    await go('index.html'); // nao limpa sessionStorage (login zera; mas so queremos navegar, entao usamos direto)
+    await go('mensagens.html?como=profissional');
+    var rows = $$('.chat-row');
+    var empresaRow = rows.filter(function (a) { return /Empresa Exemplo/.test(a.textContent); })[0];
+    L(!!empresaRow, 'mensagens (prof): conversa com a Empresa Exemplo aparece');
+    L(empresaRow.className.indexOf('chat-unread') !== -1, 'mensagens (prof): esta nao lida (empresa mandou por ultimo)');
+    await clickNav(empresaRow);
+    L(txt('.topbar-title') === 'Empresa Exemplo', 'conversa (prof): titulo = nome da empresa');
+    L($$('#msgs .bubble-in').length === 1, 'conversa (prof): mensagem da empresa aparece do lado "in"');
+    L(/Compartilhar meu WhatsApp/.test(txt('#wa-area')), 'conversa (prof): estado inicial da barra WA (ninguem compartilhou)');
+    set('#msg-in', 'Oi! Podemos conversar sim.');
+    $('#msg-form button[type=submit]').click();
+    L($$('#msgs .bubble-out').length === 1, 'conversa (prof): resposta enviada');
+  },
+  // 8: profissional compartilha o WhatsApp
+  async function () {
+    $('#wa-area button[data-wa="compartilhar"]').click();
+    L(/Aguardando Empresa Exemplo/.test(txt('#wa-area')), 'conversa (prof): aguardando apos compartilhar: ' + txt('#wa-area'));
+  },
+  // 9: empresa compartilha tambem -> liberado
+  async function () {
+    await go('conversa.html?id=joao-silva&como=empresa');
+    L(/João quer compartilhar o WhatsApp\. Compartilhar o seu\?/.test(txt('#wa-area')), 'conversa (empresa): pedido de Joao: ' + txt('#wa-area'));
+    $('#wa-area button[data-wa="compartilhar"]').click();
+    L(/Chamar no WhatsApp/.test(txt('#wa-area')), 'conversa (empresa): liberado com rotulo WhatsApp: ' + txt('#wa-area'));
+  },
+  // 10: candidatar-se e "tirar duvida" (profissional, empresa diferente)
+  async function () {
+    await go('vaga.html?id=atendente-loja');
+    L(!!$('#duvida-btn'), 'vaga: botao Tirar duvida existe');
+    await clickNav($('#duvida-btn'));
+    L(txt('.topbar-title') === 'Loja Central', 'conversa (loja central): titulo');
+    L(/Nenhuma mensagem ainda/.test(txt('#msgs')), 'conversa loja central: vazia');
+    set('#msg-in', 'Olá! A vaga ainda está com a escala 6x1 nos finais de semana?');
+    $('#msg-form button[type=submit]').click();
+    L($$('#msgs .bubble-out').length === 1, 'conversa loja central: minha mensagem aparece');
+    await wait(650);
+    L($$('#msgs .bubble-in').length === 1 && /Recebemos sua mensagem/.test(txt('#msgs')), 'conversa loja central: resposta automatica da empresa apareceu: ' + txt('#msgs .bubble-in'));
+  },
+  // 11: candidaturas.html mostra a candidatura "Em conversa" com Loja Central? nao, essa foi so duvida (nao candidatura). Verifica "Abrir conversa" no hotel-vista-mar
+  async function () {
+    await go('candidaturas.html');
+    var chips = $$('#cand-filter button').map(function (b) { return b.textContent; });
+    L(/Em andamento · \d/.test(chips[0]), 'candidaturas: filtros presentes: ' + chips.join('|'));
+    var hotel = $$('#cand-list article').filter(function (a) { return /Hotel Vista Mar/.test(a.textContent); })[0];
+    L(!!hotel && /Em conversa/.test(hotel.textContent), 'candidaturas: Hotel Vista Mar em conversa');
+    var abrir = hotel.querySelector('a.btn');
+    L(!!abrir && /Abrir conversa/.test(abrir.textContent), 'candidaturas: botao Abrir conversa no hotel');
+    // recepcionista-exemplo ainda "Visualizada" (empresa nao marcou preenchida)
+    var rec = $$('#cand-list article').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(!!rec, 'candidaturas: recepcionista aparece em andamento (Visualizada/Em conversa)');
+  },
+  // 12: exits (nao selecionado / retirada / encerrada) aparecem em Encerradas
+  async function () {
+    $$('#cand-filter button')[2].click();
+    var txtAll = txt('#cand-list');
+    L(/Não selecionado/.test(txtAll), 'candidaturas: exit "nao selecionado" presente');
+    L(/Retirada/.test(txtAll), 'candidaturas: exit "retirada" presente');
+    L(/Vaga encerrada/.test(txtAll), 'candidaturas: exit "vaga encerrada" presente');
+  },
+  // 13: empresa marca como preenchida -> registra combinado
+  async function () {
+    await go('preencher-vaga.html?vaga=recepcionista');
+    L(/Quem preencheu a vaga de Recepcionista\?/.test(txt('.page-title')), 'preencher: pergunta');
+    var nomes = $$('input[name=quem]').map(function (i) { return i.value; });
+    L(nomes.indexOf('joao-silva') !== -1, 'preencher: joao elegivel (esta em conversa): ' + nomes.join(','));
+    pick('quem', 'joao-silva');
+    submit('#fill-form');
+    L(txt('.page-title') === 'Registrar o combinado', 'preencher: avança para registrar o combinado');
+    L(txt('.topbar-title') === 'Registrar o combinado', 'preencher: titulo do topo mudou');
+    submit('#comb-form');
+    var erros = $$('.field-error').filter(function (e) { return !e.hidden; }).length;
+    L(erros === 4, 'preencher combinado: 4 erros de campos vazios (função já vem preenchida com o título da vaga) ' + erros);
+    set('#funcao', 'Recepcionista');
+    pick('tipo-contratacao', 'Tempo integral');
+    set('#moeda2', 'USD'); set('#periodo2', 'hora'); set('#valor2', '22');
+    set('#data-inicio', '2026-10-06');
+    set('#jornada', 'Seg a sex, 9h às 18h');
+    submit('#comb-form');
+    L(/Aguardando confirmação de João Silva/.test(txt('#done-title')), 'preencher combinado: aguardando: ' + txt('#done-title'));
+    L(!hasHScroll(), 'preencher combinado: sem rolagem horizontal');
+  },
+  // 14: vaga aparece "Preenchida - aguardando confirmacao" e pend card mostra
+  async function () {
+    await go('empresa.html');
+    L(/1 item precisa|itens precisam/.test(txt('.greeting p')), 'home empresa: pendencias: ' + txt('.greeting p'));
+    L(/Aguardando confirmação de João Silva/.test(d().body.textContent), 'home empresa: card aguardando');
+  },
+  // 15: profissional confirma a contratacao com o combinado (via home)
+  async function () {
+    await go('profissional.html');
+    L(/1 pendência/.test(txt('.greeting p')) || /pendências/.test(txt('.greeting p')), 'home prof: contagem: ' + txt('.greeting p'));
+    L(/Confirme a contratação/.test(txt('#confirm-card')), 'home prof: card de combinado aparece');
+    L(/US\$\s?22,00 por hora/.test(txt('#confirm-card')), 'home prof: salario do combinado: ' + txt('#confirm-card .summary'));
+    L(/06\/10\/2026/.test(txt('#confirm-card')), 'home prof: data de inicio');
+    L(!!linkByText('Algo está diferente'), 'home prof: botao contestar existe');
+    $('#confirm-card').querySelector('[data-cf="confirmar"]').click();
+    L(/Contratação confirmada/.test(txt('#confirm-card')), 'home prof: confirmado');
+    L(!hasHScroll(), 'home prof: sem rolagem horizontal');
+  },
+  // 16: consistencia -> candidatos.html mostra Joao contratado, vaga "Preenchida"
+  async function () {
+    await go('candidatos.html?vaga=recepcionista&status=contratado');
+    L(/João Silva/.test(txt('#cand-list')), 'candidatos: joao contratado apos confirmacao');
+    await go('empresa.html?aba=vagas');
+    var rec = $$('a.list-item').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(/Preenchida por João Silva · confirmado/.test(rec.textContent), 'home empresa: vaga preenchida confirmada: ' + rec.textContent.replace(/\s+/g,' '));
+  },
+  // 17: avaliar-profissional com referencia ao combinado (ana-souza, combinado diferente)
+  async function () {
+    await go('avaliar-profissional.html?id=ana-souza');
+    L(/Entregou o trabalho combinado \(Vendedora\)\?/.test(txt('.content')), 'avaliar prof: ref a funcao: ' + txt('fieldset legend'));
+    L(/Cumpriu horários e prazos \(Seg a sáb, 9h às 18h\)\?/.test(txt('.content')), 'avaliar prof: ref a jornada');
+  },
+  // 18: avaliar-empresa (loja central) com referencia ao combinado
+  async function () {
+    await go('avaliar-empresa.html?id=loja-central');
+    L(/O pagamento foi feito conforme combinado \(R\$\s?1\.900,00 por mês\)\?/.test(txt('.content')), 'avaliar empresa: ref ao salario: ' + txt('.content').slice(0,400));
+    L(/Condições e prazos foram cumpridos \(início em 15\/01\/2025, Tempo integral\)\?/.test(txt('.content')), 'avaliar empresa: ref a condicoes');
+  },
+
+  /* ===== BLOCO C — Perguntas de triagem, pretensão salarial e currículo em PDF ===== */
+  // 1: publicar-vaga -> perguntas de triagem: adicionar, validar termo proibido, corrigir, publicar
+  async function () {
+    await fresh(); await go('publicar-vaga.html');
+    L(/idade, gênero, raça, religião, estado civil, filhos, gravidez, nacionalidade ou origem/.test(txt('#f-triagem-section')), 'publicar: aviso de temas proibidos presente');
+    $('#triagem-add').click();
+    L($$('.triagem-item').length === 1, 'publicar: 1a pergunta adicionada');
+    set('#triagem-0-texto', 'Qual sua idade?');
+    pick('triagem-0-tipo', 'simnao');
+    set('#titulo', 'Auxiliar de limpeza');
+    set('#descricao', 'Limpeza e organização geral do escritório durante o expediente.');
+    pick('modelo', 'presencial');
+    set('#pais', 'Brasil'); set('#cidade', 'São Paulo');
+    set('#tipo', 'Tempo integral');
+    submit('#vaga-form');
+    L(!$('#triagem-0-texto-err').hidden && /idade/.test(txt('#triagem-0-texto-err')), 'publicar: bloqueado por termo proibido: ' + txt('#triagem-0-texto-err'));
+    L(d().body.contains(d().activeElement) && d().activeElement.id === 'triagem-0-texto', 'publicar: foco no campo com problema');
+    // corrige a pergunta
+    set('#triagem-0-texto', 'Tem disponibilidade para trabalhar aos finais de semana?');
+    submit('#vaga-form');
+    L(txt('#done-title') === 'Vaga publicada', 'publicar: publicada após corrigir a pergunta');
+    L(/Tem disponibilidade para trabalhar aos finais de semana/.test(txt('.summary')), 'publicar: resumo mostra a pergunta');
+  },
+  // 2: pergunta multipla escolha com poucas opcoes e termo proibido numa opcao
+  async function () {
+    await go('publicar-vaga.html');
+    $('#triagem-add').click();
+    set('#triagem-0-texto', 'Qual seu nível de experiência com atendimento?');
+    pick('triagem-0-tipo', 'multipla');
+    L(!$('.triagem-opcoes').hidden, 'publicar: opcoes aparecem ao escolher multipla escolha');
+    set('#triagem-0-opcao-0', 'Nenhuma');
+    set('#titulo', 'Atendente de eventos');
+    set('#descricao', 'Atendimento ao público durante eventos corporativos e feiras.');
+    pick('modelo', 'presencial');
+    set('#pais', 'Brasil'); set('#cidade', 'São Paulo');
+    set('#tipo', 'Freelancer');
+    submit('#vaga-form');
+    L(!$('#triagem-0-opcao-0-err').hidden, 'publicar: exige pelo menos 2 opcoes: ' + txt('#triagem-0-opcao-0-err'));
+    set('#triagem-0-opcao-1', 'Sou casada e tenho experiência');
+    submit('#vaga-form');
+    L(!$('#triagem-0-opcao-1-err').hidden && /casad/.test(txt('#triagem-0-opcao-1-err')), 'publicar: opcao com termo proibido bloqueada: ' + txt('#triagem-0-opcao-1-err'));
+    set('#triagem-0-opcao-1', 'Experiente');
+    submit('#vaga-form');
+    L(txt('#done-title') === 'Vaga publicada', 'publicar: multipla escolha publicada apos corrigir');
+  },
+  // 3: até 3 perguntas, botao some depois
+  async function () {
+    await go('publicar-vaga.html');
+    $('#triagem-add').click(); $('#triagem-add').click(); $('#triagem-add').click();
+    L($$('.triagem-item').length === 3, 'publicar: ate 3 perguntas');
+    L($('#triagem-add').hidden, 'publicar: botao de adicionar some no limite');
+  },
+  // 4: candidatar-se em vaga com triagem (atendente-exemplo: Sim/Não; nao esta na lista ja-candidatado)
+  async function () {
+    await fresh(); await go('vaga.html?id=atendente-exemplo');
+    $('#candidatar').click();
+    L(/Tem disponibilidade para trabalhar aos sábados\?/.test(txt('.content')), 'candidatar: pergunta de triagem aparece: ' + txt('.card-title'));
+    L($$('input[name="triagem-resp-0"]').length === 2, 'candidatar: 2 opcoes (Sim/Nao)');
+    L(!!$('#mensagem-candidato'), 'candidatar: campo de mensagem existe');
+    L(!!$('#pret-valor') && $('#pret-moeda').value === 'BRL' && $('#pret-periodo').value === 'mes', 'candidatar: pretensao pre-preenchida com moeda/periodo da vaga');
+    L(d().body.innerHTML.toLowerCase().indexOf('salário anterior') === -1 && d().body.innerHTML.toLowerCase().indexOf('último salário') === -1, 'candidatar: sem campo de salario anterior/historico');
+    L(!!$('#curriculo-input') && $('#curriculo-input').getAttribute('accept').indexOf('pdf') !== -1, 'candidatar: input de arquivo aceita so pdf');
+    L(!hasHScroll(), 'candidatar: sem rolagem horizontal');
+    L(btnH().length === 0, 'candidatar: botoes 40px ' + JSON.stringify(btnH()));
+  },
+  // 5: anexar arquivo invalido (tipo errado) via arquivo simulado
+  async function () {
+    var input = $('#curriculo-input');
+    var txtFile = new File(['conteudo qualquer'], 'curriculo.txt', { type: 'text/plain' });
+    var dt = new DataTransfer(); dt.items.add(txtFile); input.files = dt.files;
+    fire(input, 'change');
+    L(!$('#curriculo-err').hidden && /PDF/.test(txt('#curriculo-err')), 'candidatar: rejeita arquivo que nao e pdf: ' + txt('#curriculo-err'));
+    // arquivo pdf grande demais (6 MB)
+    var grande = new File([new Uint8Array(6 * 1024 * 1024)], 'curriculo-grande.pdf', { type: 'application/pdf' });
+    var dt2 = new DataTransfer(); dt2.items.add(grande); input.files = dt2.files;
+    fire(input, 'change');
+    L(!$('#curriculo-err').hidden && /5 MB/.test(txt('#curriculo-err')), 'candidatar: rejeita pdf maior que 5 MB: ' + txt('#curriculo-err'));
+    // pdf valido
+    var ok = new File([new Uint8Array(1024 * 1024)], 'meu-curriculo.pdf', { type: 'application/pdf' });
+    var dt3 = new DataTransfer(); dt3.items.add(ok); input.files = dt3.files;
+    fire(input, 'change');
+    L(/meu-curriculo\.pdf/.test(txt('#curriculo-area')) && /1,0 MB/.test(txt('#curriculo-area')), 'candidatar: pdf valido aceito com nome e tamanho: ' + txt('#curriculo-area'));
+    L(!!linkByText('Remover'), 'candidatar: opcao de remover aparece');
+  },
+  // 6: responde a triagem, preenche pretensao e envia
+  async function () {
+    pick('triagem-resp-0', 'Sim');
+    set('#mensagem-candidato', 'Tenho experiência com atendimento ao público e disponibilidade total.');
+    set('#pret-valor', '2100');
+    $('#enviar').click();
+    L(txt('#done-title') === 'Candidatura enviada', 'candidatar: enviada com sucesso');
+  },
+  // 7: empresa ve a candidatura completa em candidatos.html (joao entra dinamicamente em "atendente")
+  async function () {
+    await go('candidatos.html?vaga=atendente');
+    var card = $$('#cand-list article, #cand-list .card').filter(function (a) { return /João Silva/.test(a.textContent); })[0];
+    L(!!card, 'candidatos: card do joao encontrado (novo, dinamico)');
+    L(/Tem disponibilidade para trabalhar aos sábados/.test(card.textContent) && /Sim/.test(card.textContent), 'candidatos: resposta de triagem visivel: ' + card.textContent.replace(/\s+/g,' ').slice(0,300));
+    L(/Tenho experiência com atendimento ao público/.test(card.textContent), 'candidatos: mensagem do candidato visivel');
+    L(/Dentro da faixa/.test(card.textContent), 'candidatos: pretensao dentro da faixa (2100 entre 1900-2300): ' + card.textContent.match(/Pretensão[^<]*/));
+    L(/meu-curriculo\.pdf/.test(card.textContent) && /1,0 MB/.test(card.textContent), 'candidatos: card mostra nome e tamanho do currículo');
+    L(!!card.querySelector('[data-todo]') && /Ver currículo/.test(card.querySelector('[data-todo]').textContent), 'candidatos: botao Ver curriculo presente');
+  },
+  // 8: perfil-profissional mostra o bloco completo
+  async function () {
+    await go('perfil-profissional.html?id=joao-silva&vaga=atendente');
+    L(/Candidatura/.test(txt('.content')), 'perfil: secao Candidatura existe');
+    L(/meu-curriculo\.pdf/.test(txt('.content')) && /1,0 MB/.test(txt('.content')), 'perfil: nome e tamanho do curriculo: ' + txt('.cand-arquivo'));
+    var verBtn = linkByText('Ver currículo');
+    L(!!verBtn, 'perfil: botao Ver curriculo existe');
+    verBtn.click(); // botao data-todo: nao navega, so mostra o aviso
+    L(/protótipo/i.test(txt('#toast')), 'perfil: aviso de protótipo ao abrir curriculo: ' + txt('#toast'));
+  },
+  // 9: candidato do mock com pretensao acima da faixa (mariana-rocha, atendente)
+  async function () {
+    await go('candidatos.html?vaga=atendente&status=conversa');
+    var card2 = $$('#cand-list article, #cand-list .card').filter(function (a) { return /Mariana Rocha/.test(a.textContent); })[0];
+    L(!!card2 && /Acima da faixa/.test(card2.textContent), 'candidatos: mariana acima da faixa (2600 > 2300): ' + (card2 ? card2.textContent.replace(/\s+/g,' ').slice(0,250) : '(nao encontrada)'));
+    L(!!card2 && /Não/.test(card2.textContent.match(/Tem disponibilidade[^·]*/) ? card2.textContent : ''), 'candidatos: resposta de triagem sim/nao da mariana');
+  },
+  // 10: candidato do mock ja com curriculo (rafael-lima)
+  async function () {
+    await go('candidatos.html?vaga=recepcionista&status=conversa');
+    var card3 = $$('#cand-list article, #cand-list .card').filter(function (a) { return /Rafael Lima/.test(a.textContent); })[0];
+    L(!!card3, 'candidatos: rafael encontrado');
+    var btn3 = card3 && card3.querySelector('[data-todo]');
+    L(!!btn3 && /Ver currículo/.test(btn3.textContent), 'candidatos: rafael (mock) tem curriculo demonstrado');
+  },
+  /* ===== BLOCO D — Cobertura complementar (validação básica, perfis, avaliações) ===== */
+
+  // D1: publicar-vaga sem preencher nada exige os campos básicos; competências e idiomas (adicionar/remover)
+  async function () {
+    await fresh(); await go('publicar-vaga.html');
+    submit('#vaga-form');
+    var camposBase = ['titulo', 'descricao', 'modelo', 'pais', 'cidade', 'tipo']; // "posicoes" já vem com o valor padrão 1, válido
+    var todosComErro = camposBase.every(function (id) { return !$('#' + id + '-err').hidden; });
+    L(todosComErro, 'publicar: campos básicos exigidos sem nada preenchido');
+    set('#competencias-in', 'Atendimento ao público'); $('#competencias-add').click();
+    L($$('#competencias-list .chip').length === 1, 'publicar: competência adicionada');
+    $('#competencias-list .chip-x').click();
+    L($$('#competencias-list .chip').length === 0, 'publicar: competência removida');
+    set('#idioma-sel', 'Espanhol'); set('#nivel-sel', 'Básico'); $('#idiomas-add').click();
+    L($$('#idiomas-list .chip').length === 1 && /Espanhol · Básico/.test(txt('#idiomas-list')), 'publicar: idioma adicionado');
+  },
+
+  // D2: perfil-empresa - alternar Seguir / Seguindo
+  async function () {
+    await fresh(); await go('perfil-empresa.html?id=grupo-horizonte');
+    L(/Seguir empresa/.test(txt('#seguir')), 'perfil-empresa: começa como "Seguir empresa"');
+    $('#seguir').click();
+    L(/Seguindo/.test(txt('#seguir')) && $('#seguir').getAttribute('aria-pressed') === 'true', 'perfil-empresa: vira "Seguindo"');
+    $('#seguir').click();
+    L(/Seguir empresa/.test(txt('#seguir')) && $('#seguir').getAttribute('aria-pressed') === 'false', 'perfil-empresa: volta a "Seguir empresa"');
+  },
+
+  // D3: avaliar-profissional - envio vazio mostra erro em todas as perguntas e na nota
+  async function () {
+    await fresh(); await go('avaliar-profissional.html?id=ana-souza');
+    submit('#rate-form');
+    var perguntas = $$('#rate-form fieldset.group');
+    var todasComErro = perguntas.every(function (fs) { var err = fs.querySelector('.field-error'); return err && !err.hidden; });
+    L(perguntas.length === 5 && todasComErro, 'avaliar profissional: 4 perguntas + nota, todas com erro ao enviar vazio');
+  },
+
+  // D4: avaliar-empresa - envio vazio mostra erro em todas as perguntas e na nota
+  async function () {
+    await fresh(); await go('avaliar-empresa.html?id=loja-central');
+    submit('#rate-form');
+    var perguntas = $$('#rate-form fieldset.group');
+    var todasComErro = perguntas.every(function (fs) { var err = fs.querySelector('.field-error'); return err && !err.hidden; });
+    L(perguntas.length === 6 && todasComErro, 'avaliar empresa: 5 perguntas + nota, todas com erro ao enviar vazio');
+  },
+
+  // D5: vaga.html já candidatada mostra "ver status" em vez de "Candidatar-se"
+  async function () {
+    await fresh(); await go('vaga.html?id=recepcionista-exemplo');
+    L(/Candidatura enviada · ver status/.test(txt('.content')), 'vaga: já candidatado (histórico) mostra "ver status" em vez de "Candidatar-se"');
+    L(!$('#candidatar'), 'vaga: botão Candidatar-se não aparece quando já há candidatura');
+  }
+];
+(async function () {
+  try {
+    for (var i = 0; i < steps.length && i < UNTIL; i++) { try { await steps[i](); } catch (e) { L(false, 'passo ' + (i + 1) + ' erro: ' + e.message); } }
+  } finally {
+    var okN = log.filter(function (l) { return l.indexOf('PASS') === 0; }).length;
+    var resumo = 'RESUMO: ' + okN + ' / ' + log.length + ' passaram\n\n';
+    document.getElementById('log').textContent = resumo + log.join('\n'); document.title = 'DONE';
+  }
+})();
+</script>

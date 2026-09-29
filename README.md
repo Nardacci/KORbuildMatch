@@ -53,6 +53,24 @@ Candidatura e conversa (as duas jornadas):
 - **Combinado registrado:** o salário e as condições ficam disponíveis como referência nas perguntas de avaliação sobre pagamento e condições, por exemplo "O pagamento foi feito conforme combinado (R$ 1.800,00 por mês)?".
 - **Card de confirmação do profissional:** aparece desde o primeiro acesso, com um combinado fictício já definido em `mock-data.js` — não é preciso passar pela jornada da empresa para vê-lo. Se a empresa registrar um combinado em `preencher-vaga.html` na mesma sessão, o card passa a mostrar os dados dela. Três ações: "Confirmar" (a contratação entra no histórico dos dois), "Algo está diferente" (contesta um ponto do combinado; a empresa vê "Combinado contestado" na vaga) e "Não fui contratado" (pede confirmação antes de enviar; a empresa vê "Contratação recusada por João Silva" e a vaga volta a "Aberta" para escolher outra pessoa — o vínculo não entra no histórico de ninguém).
 
+A candidatura completa (perguntas de triagem, pretensão salarial e currículo):
+
+- **Perguntas de triagem:** em `publicar-vaga.html`, a empresa pode criar até 3 perguntas (Sim/Não ou múltipla escolha, até 4 opções). Um aviso fixo lembra que perguntar sobre idade, gênero, raça, religião, estado civil, filhos, gravidez, nacionalidade ou origem não é permitido; se o texto da pergunta ou de uma opção citar um desses temas, a publicação fica bloqueada até a pergunta ser reescrita. Nenhuma resposta é eliminatória — a empresa só vê as respostas e decide. As vagas `recepcionista-exemplo` e `atendente-exemplo` já têm perguntas de exemplo no mock.
+- **Pretensão salarial (opcional):** ao se candidatar em `vaga.html`, o profissional pode informar valor, moeda e período, já preenchidos com os da vaga. Não há campo de salário anterior ou histórico salarial. A empresa vê a pretensão junto com "Dentro da faixa", "Acima da faixa" ou "Abaixo da faixa" (só quando a moeda e o período coincidem com os da vaga).
+- **Currículo em PDF (opcional):** só aceita PDF de até 5 MB, com nome e tamanho mostrados e opção de remover. O arquivo em si nunca é enviado nem salvo — nem no `sessionStorage` —, só o nome e o tamanho. Para a empresa, "Ver currículo" mostra o aviso de protótipo. Rafael Lima (candidato de Recepcionista) já vem com um currículo anexado no mock, para demonstrar.
+- **O que a empresa recebe:** `candidatos.html` e `perfil-profissional.html` (quando aberto a partir de uma candidatura) mostram um bloco "Candidatura" com a mensagem do candidato, as respostas de triagem, a pretensão salarial (com a indicação de faixa) e o currículo, quando houver. A tela de confirmação da candidatura em `vaga.html` mostra tudo o que será enviado antes de confirmar.
+
+## Testes
+
+`docs/tests/journeys.html` é uma suíte de testes automatizados (41 passos, ~150 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+
+## Demonstração
+
+Dois GIFs curtos em `docs/demo/`:
+
+- `card-confirmacao-3-caminhos.gif` — os três caminhos do card de confirmação: Confirmar, Algo está diferente e Não fui contratado.
+- `candidatura-triagem-pretensao-curriculo.gif` — uma candidatura completa, respondendo à pergunta de triagem, informando a pretensão salarial e anexando um currículo em PDF.
+
 ## Como alterar os dados
 
 Todos os nomes, números e vagas estão em `assets/js/mock-data.js`. Edite esse arquivo e publique de novo; não é preciso mexer no restante do código.
@@ -70,6 +88,8 @@ mensagens.html, conversa.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
+docs/tests/journeys.html  testes automatizados das duas jornadas
+docs/demo/                GIFs curtos de demonstração
 robots.txt                bloqueia buscadores durante a validação
 ```
 
@@ -91,4 +111,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` nos três HTML (por exemplo, `styles.css?v=20260928-2`). A cada publicação que mude CSS ou JS, troque esse valor nos três arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260928-8`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.

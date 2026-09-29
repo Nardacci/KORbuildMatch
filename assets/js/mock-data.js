@@ -66,17 +66,28 @@
 
       // Quem se candidatou a cada vaga. "atende" = quantos requisitos da vaga a pessoa atende.
       // "data" = quando se candidatou; usada para o prazo de 7 dias ("Responder até").
+      // "candidatura" (opcional): o que a pessoa enviou ao se candidatar — mensagem, respostas de
+      // triagem (por índice da pergunta, ver vaga correspondente em "vagas"), pretensão salarial
+      // e currículo (só nome e tamanho; o arquivo em si nunca é salvo, nem no protótipo).
       candidatos: {
         recepcionista: [
           { id: 'joao-silva', atende: 5, status: 'novo', data: '2026-09-23' },
-          { id: 'rafael-lima', atende: 4, status: 'conversa', data: '2026-09-21' },
-          { id: 'fernanda-costa', atende: 4, status: 'conversa', data: '2026-09-22' },
+          { id: 'rafael-lima', atende: 4, status: 'conversa', data: '2026-09-21',
+            candidatura: {
+              mensagem: 'Tenho experiência recente em recepção e adoraria continuar nessa área.',
+              triagem: { 0: 'Avançado' },
+              pretensao: { valor: 2200, moeda: 'BRL', periodo: 'mes' },
+              curriculo: { nome: 'CV-Rafael-Lima.pdf', tamanho: 542000 }
+            } },
+          { id: 'fernanda-costa', atende: 4, status: 'conversa', data: '2026-09-22',
+            candidatura: { mensagem: 'Já trabalhei com atendimento e recepção antes. Fico à disposição.' } },
           { id: 'juliana-alves', atende: 5, status: 'novo', data: '2026-09-26' },
           { id: 'diego-martins', atende: 4, status: 'novo', data: '2026-09-27' },
           { id: 'thiago-pereira', atende: 3, status: 'nao', data: '2026-09-10' }
         ],
         atendente: [
-          { id: 'mariana-rocha', atende: 5, status: 'conversa', data: '2026-09-15' },
+          { id: 'mariana-rocha', atende: 5, status: 'conversa', data: '2026-09-15',
+            candidatura: { triagem: { 0: 'Não' }, pretensao: { valor: 2600, moeda: 'BRL', periodo: 'mes' } } },
           { id: 'paulo-andrade', atende: 4, status: 'conversa', data: '2026-09-18' },
           { id: 'lucas-teixeira', atende: 4, status: 'novo', data: '2026-09-25' },
           { id: 'thiago-pereira', atende: 5, status: 'novo', data: '2026-09-26' },
@@ -156,7 +167,22 @@
         idiomas: ['Português', 'Inglês', 'Espanhol', 'Francês', 'Alemão', 'Italiano', 'Mandarim', 'Libras'],
         niveis: ['Básico', 'Intermediário', 'Avançado', 'Fluente'],
         experiencias: ['Sem experiência', 'Até 1 ano', '1 a 2 anos', '3 a 5 anos', 'Mais de 5 anos'],
-        limiteCompetencias: 12
+        limiteCompetencias: 12,
+
+        // Perguntas de triagem: até 3 por vaga, Sim/Não ou múltipla escolha com até 4 opções.
+        // Nenhuma resposta é eliminatória — a empresa só vê as respostas e decide.
+        limitePerguntasTriagem: 3,
+        limiteOpcoesTriagem: 4,
+        // Termos que não podem aparecer no texto de uma pergunta (ou de uma opção), por tema proibido.
+        termosProibidosTriagem: [
+          'idade', 'anos de idade', 'quantos anos', 'data de nascimento', 'ano de nascimento',
+          'gênero', 'genero', 'sexo', 'homem', 'mulher',
+          'raça', 'raca', 'cor da pele', 'etnia',
+          'religião', 'religiao', 'crença', 'crenca',
+          'estado civil', 'casado', 'casada', 'solteiro', 'solteira', 'divorciado', 'divorciada', 'viúvo', 'viuvo', 'viúva', 'viuva',
+          'filho', 'filhos', 'filha', 'filhas', 'gravidez', 'grávida', 'gravida', 'gestante', 'maternidade', 'paternidade',
+          'nacionalidade', 'origem', 'estrangeiro', 'estrangeira', 'imigrante'
+        ]
       }
     },
 
@@ -515,7 +541,11 @@
         ],
         descricao: 'Recepção de clientes e visitantes, controle de agenda e atendimento telefônico da Empresa Exemplo.',
         competencias: ['Atendimento ao público', 'Agenda e telefonia', 'Pacote Office'],
-        idiomas: ['Português · Nativo', 'Inglês · Básico']
+        idiomas: ['Português · Nativo', 'Inglês · Básico'],
+        // Perguntas de triagem definidas pela empresa ao publicar a vaga (nenhuma resposta é eliminatória).
+        perguntasTriagem: [
+          { texto: 'Qual seu nível de inglês?', tipo: 'multipla', opcoes: ['Básico', 'Intermediário', 'Avançado', 'Fluente'] }
+        ]
       },
       'atendente-exemplo': {
         id: 'atendente-exemplo', titulo: 'Atendente de loja', empresa: 'empresa-exemplo',
@@ -529,7 +559,10 @@
         ],
         descricao: 'Atendimento aos clientes da loja e organização do espaço de vendas da Empresa Exemplo.',
         competencias: ['Atendimento ao público', 'Vendas'],
-        idiomas: ['Português · Nativo']
+        idiomas: ['Português · Nativo'],
+        perguntasTriagem: [
+          { texto: 'Tem disponibilidade para trabalhar aos sábados?', tipo: 'simnao' }
+        ]
       }
     },
 
