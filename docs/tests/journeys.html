@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (41 passos, ~150 verificações).
+  KORbuild Match — testes automatizados (49 passos, ~215 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -12,6 +12,8 @@
     B — Chat, WhatsApp/SMS/e-mail, status da candidatura e combinado registrado
     C — Perguntas de triagem, pretensão salarial e currículo em PDF
     D — Cobertura complementar (validação básica, perfis, avaliações)
+    E — Localização: indicações nos arredores (raio da vaga + distância máxima
+        do profissional, aviso para ampliar, vaga remota) e busca com filtros opcionais
 -->
 <meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
 <iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
@@ -526,6 +528,108 @@ var steps = [
     await fresh(); await go('vaga.html?id=recepcionista-exemplo');
     L(/Candidatura enviada · ver status/.test(txt('.content')), 'vaga: já candidatado (histórico) mostra "ver status" em vez de "Candidatar-se"');
     L(!$('#candidatar'), 'vaga: botão Candidatar-se não aparece quando já há candidatura');
+  },
+
+  /* ===== BLOCO E — Localização (documento v0.2): indicações nos arredores e busca com filtros opcionais ===== */
+
+  // E1: indicações da Recepcionista: só quem está no raio de 40 km e aceita a distância; aviso para ampliar
+  async function () {
+    await fresh(); await go('empresa.html?aba=indicados');
+    var chips = $$('#ind-filter button').map(function (b) { return b.textContent; });
+    L(chips.join('|') === 'Recepcionista · 2|Atendente de loja · 3', 'indicados: contagem já filtrada pela localização: ' + chips.join('|'));
+    L(/até 40 km da vaga \(São Paulo, SP\)/.test(txt('#ind-regra')) && /linha reta/.test(txt('#ind-regra')), 'indicados: regra explicada (raio padrão 40 km, linha reta): ' + txt('#ind-regra'));
+    L(/2 fora do raio da vaga/.test(txt('#ind-fora')), 'indicados: quem ficou de fora é contado, sem nomes: ' + txt('#ind-fora'));
+    L(!/Renata Campos|Paulo Andrade/.test(txt('#ind-list')), 'indicados: Renata (Jundiaí) e Paulo (Campinas) não aparecem');
+    L(/São Paulo, SP · ≈ 5 km da vaga/.test(txt('#ind-list')) && /Guarulhos, SP · ≈ 15 km da vaga/.test(txt('#ind-list')), 'indicados: cidade e distância aproximada, sem endereço');
+    L(!!$('#ind-aviso') && /Poucos profissionais nos arredores/.test(txt('#ind-aviso')) && /Com 60 km, entra mais 1 profissional/.test(txt('#ind-aviso')), 'indicados: aviso para ampliar o raio: ' + txt('#ind-aviso'));
+    L(!hasHScroll(), 'indicados: sem rolagem horizontal');
+    L(btnH().length === 0, 'indicados: botoes 40px ' + JSON.stringify(btnH()));
+  },
+  // E2: ampliar o raio traz a Renata; o raio ampliado continua valendo ao voltar à tela
+  async function () {
+    $('#ind-aviso [data-ampliar]').click();
+    L(/Renata Campos/.test(txt('#ind-list')) && /Jundiaí, SP · ≈ 50 km da vaga/.test(txt('#ind-list')), 'ampliar: Renata entra com 60 km');
+    L(!$('#ind-aviso'), 'ampliar: aviso some depois de ampliar');
+    L(/até 60 km/.test(txt('#ind-regra')), 'ampliar: regra mostra o raio novo');
+    await go('empresa.html?aba=indicados');
+    L(/Recepcionista · 3/.test(txt('#ind-filter')), 'ampliar: raio ampliado persiste na sessão: ' + txt('#ind-filter'));
+    L(!/Paulo Andrade/.test(txt('#ind-list')), 'ampliar: Paulo (Campinas, ~85 km) continua fora');
+  },
+  // E3: Atendente de loja: Beatriz está no raio, mas além da distância que ela mesma aceita (10 km)
+  async function () {
+    $$('#ind-filter button')[1].click();
+    L(!/Beatriz/.test(txt('#ind-list')), 'indicados atendente: Beatriz não aparece');
+    L(/1 mora além da distância que aceita/.test(txt('#ind-fora')), 'indicados atendente: motivo contado: ' + txt('#ind-fora'));
+    L(!$('#ind-aviso'), 'indicados atendente: com 3 indicados, sem aviso de poucos');
+  },
+  // E4: perfil do profissional mostra a distância máxima e as preferências de localização
+  async function () {
+    await go('perfil-profissional.html?id=paulo-andrade&vaga=recepcionista');
+    var sec = $$('.section').filter(function (x) { return /Localização e preferências/.test(x.textContent); })[0];
+    var t = sec ? sec.textContent.replace(/\s+/g, ' ') : '';
+    L(/Distância máxima que aceitaaté 30 km/.test(t), 'perfil: distância máxima que aceita: ' + t);
+    L(/Aceita se mudarNão/.test(t) && /Modelos de trabalhoPresencial, Híbrido/.test(t) && /UTC−3/.test(t), 'perfil: mudar, modelos e fuso');
+    L(/≈ 85 km da vaga/.test(t), 'perfil: distância aproximada até a vaga');
+  },
+  // E5: publicar vaga: raio padrão por país, vaga remota sem raio, cidade localizada filtra as indicações
+  async function () {
+    await fresh(); await go('publicar-vaga.html');
+    set('#pais', 'Estados Unidos');
+    var opt = function () { var r = $('#raio'); return r.options[r.selectedIndex].text; };
+    L(opt() === '25 milhas (padrão)', 'publicar: EUA usa 25 milhas: ' + opt());
+    set('#pais', 'Brasil');
+    L(opt() === '40 km (padrão)', 'publicar: demais países usam 40 km: ' + opt());
+    pick('modelo', 'remoto');
+    L($('#loc-fields').hidden && !$('#loc-remoto').hidden && !!$('#fuso'), 'publicar: remota esconde local e raio, mostra fuso');
+    pick('modelo', 'presencial');
+    set('#titulo', 'Recepcionista'); set('#descricao', 'Recepção de clientes no escritório de Campinas.');
+    set('#cidade', 'campinas'); set('#tipo', 'Tempo integral');
+    submit('#vaga-form');
+    L(/LocalCampinas, Brasil/.test(txt('.summary')) && /Raio de busca40 km/.test(txt('.summary')), 'publicar: resumo com cidade e raio: ' + txt('.summary'));
+    await clickNav(linkByText('Ver profissionais indicados'));
+    L(/Campinas, SP/.test(txt('#ind-regra')), 'publicar: indicações a partir de Campinas');
+    L(/Paulo Andrade/.test(txt('#ind-list')) && /Renata Campos/.test(txt('#ind-list')) && !/Mariana/.test(txt('#ind-list')), 'publicar: só quem está perto de Campinas: ' + txt('#ind-list').slice(0, 200));
+  },
+  // E6: profissional: vagas indicadas respeitam a distância máxima que ele aceita
+  async function () {
+    await fresh(); await go('profissional.html?aba=vagas');
+    L(txt('#acc-vagas-sum') === '3 vagas indicadas', 'prof: 3 vagas dentro de 25 km: ' + txt('#acc-vagas-sum'));
+    L(!/Recepcionista de hotel/.test(txt('#vagas-ind')) && /1 vaga indicada não aparece/.test(txt('#vagas-fora')), 'prof: vaga de Santos (~60 km) fica de fora');
+    L(/≈ 10 km de você/.test(txt('#vagas-ind')) && /De qualquer lugar · equipe em UTC−3/.test(txt('#vagas-ind')), 'prof: distância aproximada e fuso da vaga remota');
+    set('#dist-max', '60');
+    L(txt('#acc-vagas-sum') === '4 vagas indicadas' && /Recepcionista de hotel/.test(txt('#vagas-ind')), 'prof: com 60 km, a vaga de Santos aparece');
+    await go('vaga.html?id=front-desk-miami');
+    L(/Miami, FL · Estados Unidos/.test(txt('.summary')), 'vaga: local com país quando é outro: ' + txt('.summary'));
+    L(/25 milhas/.test(txt('#vaga-alcance')), 'vaga: aviso de fora do raio (em milhas): ' + txt('#vaga-alcance'));
+    L(!!$('#candidatar'), 'vaga: candidatar-se continua possível fora do raio');
+  },
+  // E7: busca de vagas: filtros opcionais, todos desligados de início
+  async function () {
+    await go('buscar.html?como=profissional');
+    L(txt('#busca-count') === '8 vagas encontradas' && txt('#acc-filtros-sum') === 'Nenhum filtro', 'busca vagas: sem filtros, todas: ' + txt('#busca-count'));
+    set('#f-dist', '25');
+    L(txt('#busca-count') === '6 vagas encontradas' && /Suporte ao cliente/.test(txt('#busca-list')), 'busca vagas: até 25 km (remotas continuam): ' + txt('#busca-count'));
+    set('#f-dist', ''); set('#f-fuso', '-5');
+    L(txt('#busca-count') === '2 vagas encontradas', 'busca vagas: fuso UTC−5: ' + txt('#busca-count'));
+    set('#f-fuso', ''); set('#f-cidade', 'santos');
+    L(txt('#busca-count') === '1 vaga encontrada' && /Recepcionista de hotel/.test(txt('#busca-list')), 'busca vagas: cidade');
+    $('#f-limpar').click();
+    L(txt('#busca-count') === '8 vagas encontradas' && txt('#acc-filtros-sum') === 'Nenhum filtro', 'busca vagas: limpar filtros');
+    L(!hasHScroll(), 'busca vagas: sem rolagem horizontal');
+  },
+  // E8: busca de profissionais (empresa): distância, país, modelo, disposto a se mudar
+  async function () {
+    await go('buscar.html?como=empresa');
+    L(txt('.topbar-title') === 'Buscar profissionais' && txt('#busca-count') === '15 profissionais encontrados', 'busca prof: sem filtros: ' + txt('#busca-count'));
+    set('#f-dist', '10');
+    L(txt('#busca-count') === '6 profissionais encontrados' && /≈ 5 km da sede/.test(txt('#busca-list')), 'busca prof: até 10 km da sede: ' + txt('#busca-count'));
+    set('#f-dist', ''); $('#f-mudar-in').click();
+    L(txt('#busca-count') === '3 profissionais encontrados' && /Aceita se mudar/.test(txt('#busca-list')), 'busca prof: só quem aceita se mudar: ' + txt('#busca-count'));
+    $('#f-mudar-in').click(); set('#f-pais', 'Portugal');
+    L(txt('#busca-count') === '1 profissional encontrado' && /Lisboa · Portugal/.test(txt('#busca-list')), 'busca prof: país');
+    set('#f-pais', ''); $('input[name="f-modelo"][value="remoto"]').click();
+    L(txt('#busca-count') === '7 profissionais encontrados', 'busca prof: aceita remoto: ' + txt('#busca-count'));
+    L(!hasHScroll(), 'busca prof: sem rolagem horizontal');
   }
 ];
 (async function () {

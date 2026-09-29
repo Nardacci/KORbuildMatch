@@ -1227,3 +1227,10 @@ fieldset.group > legend { padding: 0; margin-bottom: 8px; font-size: 13px; font-
 
 .cand-msg { font-style: italic; }
 .cand-arquivo { margin-top: -6px; }
+
+/* ---------- Localização (indicações e busca) ---------- */
+
+.card-warn { border: 1.5px solid var(--amber); }
+.card-warn > .btn { align-self: flex-start; }
+.loc-line { color: var(--ink); }
+.note-indent { padding-left: 24px; }
