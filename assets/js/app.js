@@ -22,7 +22,8 @@
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     x: '<path d="M6 6l12 12M18 6L6 18"/>',
     eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
-    minus: '<path d="M5 12h14"/>'
+    minus: '<path d="M5 12h14"/>',
+    send: '<path d="M4 12l16-8-6 16-3-6-7-2z"/>'
   };
 
   function icon(name, size, opts) {
@@ -41,6 +42,7 @@
   }
 
   function $(sel) { return document.querySelector(sel); }
+  function $all(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
 
   var params = new URLSearchParams(window.location.search);
 
@@ -120,6 +122,31 @@
 
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
 
+  function dataBR(iso) {
+    var p = iso.split('-');
+    return p[2] + '/' + p[1] + '/' + p[0];
+  }
+
+  function hojeISO() {
+    var d = new Date();
+    function dois(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + dois(d.getMonth() + 1) + '-' + dois(d.getDate());
+  }
+
+  // Uma data ISO (AAAA-MM-DD) + n dias, formatada dd/mm. Usada no prazo de 7 dias de resposta.
+  function maisDias(iso, n) {
+    var d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    function dois(x) { return (x < 10 ? '0' : '') + x; }
+    return dois(d.getDate()) + '/' + dois(d.getMonth() + 1);
+  }
+
+  function horaCurta(iso) {
+    var d = new Date(iso);
+    function dois(n) { return (n < 10 ? '0' : '') + n; }
+    return dois(d.getHours()) + ':' + dois(d.getMinutes());
+  }
+
   // Seção que abre e fecha ao tocar no cabeçalho. Começa fechada.
   function accordion(id, title, summary, body, dark) {
     return '<section class="acc' + (dark ? ' acc-dark' : '') + '">' +
@@ -145,6 +172,8 @@
 
   var STATUS_CHIP = { 'Aberta': 'green', 'Pausada': 'grey', 'Preenchida': 'blue' };
 
+  var PR_ID = window.MOCK.profissional.id;
+
   /* ---------- Estado da jornada da empresa (sessionStorage) ---------- */
 
   var KEY = 'kor.empresa';
@@ -154,6 +183,7 @@
     try { s = JSON.parse(window.sessionStorage.getItem(KEY)) || {}; } catch (e) { s = {}; }
     s.vagas = s.vagas || [];             // vagas publicadas na demonstração, a mais recente primeiro
     s.preenchidas = s.preenchidas || {}; // vagaId -> [ids de profissionais aguardando confirmação]
+    s.combinados = s.combinados || {};   // vagaId -> combinado registrado (salário, início, jornada, função, tipo)
     s.status = s.status || {};           // "vagaId:profId" -> status do candidato
     s.convites = s.convites || {};       // "vagaId:profId" -> true
     s.avaliados = s.avaliados || {};     // profId -> avaliação enviada
@@ -174,12 +204,148 @@
     s.candidaturas = s.candidaturas || {}; // vagaId -> { data, status } (candidaturas feitas na demonstração)
     s.avaliados = s.avaliados || {};       // empresaId -> avaliação enviada
     s.seguindo = s.seguindo || {};         // empresaId -> true
-    s.confirmacao = s.confirmacao || null; // 'sim' | 'nao' (contratação em Recepcionista, na Empresa Exemplo)
+    s.confirmacao = s.confirmacao || null; // null | 'confirmado' | 'contestado' (contratação em Recepcionista, na Empresa Exemplo)
+    s.contestacaoTexto = s.contestacaoTexto || ''; // o que mudou, quando contestado
     return s;
   }
 
   function saveP(s) {
     try { window.sessionStorage.setItem(KEY_P, JSON.stringify(s)); } catch (e) { /* sem armazenamento: segue sem continuidade */ }
+  }
+
+  /* ---------- Conversas (sessionStorage, compartilhada pelas duas jornadas) ---------- */
+
+  var KEY_CHAT = 'kor.chat';
+
+  function loadChat() {
+    var c = {};
+    try { c = JSON.parse(window.sessionStorage.getItem(KEY_CHAT)) || {}; } catch (e) { c = {}; }
+    if (!c.conversas) {
+      // Primeira vez na sessão: parte das conversas já existentes em mock-data.js.
+      c.conversas = {};
+      var seed = window.MOCK.conversasIniciais || {};
+      Object.keys(seed).forEach(function (k) {
+        var v = seed[k];
+        c.conversas[k] = {
+          id: k, ladoDono: v.ladoDono, profissionalId: v.profissionalId, empresaId: v.empresaId,
+          vagaTitulo: v.vagaTitulo || '', vagaEmpresaId: v.vagaEmpresaId || null, vagaProfId: v.vagaProfId || null,
+          mensagens: v.mensagens.map(function (m) { return { de: m.de, texto: m.texto, quando: m.quando }; }),
+          compartilhou: { empresa: !!v.compartilhou.empresa, profissional: !!v.compartilhou.profissional },
+          lidoPor: { empresa: !!v.lidoPor.empresa, profissional: !!v.lidoPor.profissional },
+          respondeuAuto: false
+        };
+      });
+      saveChat(c);
+    }
+    return c;
+  }
+
+  function saveChat(c) {
+    try { window.sessionStorage.setItem(KEY_CHAT, JSON.stringify(c)); } catch (e) { /* sem armazenamento: segue sem continuidade */ }
+  }
+
+  // O id de uma conversa é sempre o id "do outro lado" a partir da Empresa Exemplo/João Silva:
+  // o profissional, exceto quando é o profissional falando com outra empresa (aí é o id da empresa).
+  function chatKey(ladoDono, profissionalId, empresaId) {
+    return ladoDono === 'profissional' ? empresaId : profissionalId;
+  }
+
+  function obterOuCriarConversa(opts) {
+    var c = loadChat();
+    var id = chatKey(opts.ladoDono, opts.profissionalId, opts.empresaId);
+    var cv = c.conversas[id];
+    if (!cv) {
+      cv = c.conversas[id] = {
+        id: id, ladoDono: opts.ladoDono, profissionalId: opts.profissionalId, empresaId: opts.empresaId,
+        vagaTitulo: opts.vagaTitulo || '', vagaEmpresaId: opts.vagaEmpresaId || null, vagaProfId: opts.vagaProfId || null,
+        mensagens: [], compartilhou: { empresa: false, profissional: false }, lidoPor: { empresa: true, profissional: true },
+        respondeuAuto: false
+      };
+    } else if (opts.vagaTitulo) {
+      cv.vagaTitulo = opts.vagaTitulo;
+      cv.vagaEmpresaId = opts.vagaEmpresaId || cv.vagaEmpresaId;
+      cv.vagaProfId = opts.vagaProfId || cv.vagaProfId;
+    }
+    saveChat(c);
+    return cv;
+  }
+
+  function marcarLido(id, lado) {
+    var c = loadChat();
+    if (c.conversas[id]) { c.conversas[id].lidoPor[lado] = true; saveChat(c); }
+  }
+
+  // Resposta automática de quem não está logado nesta demonstração (qualquer um, menos a Empresa Exemplo e o João Silva).
+  function respostaAutomatica(cv) {
+    if (cv.ladoDono === 'ambos') return null;
+    if (cv.ladoDono === 'empresa') {
+      return { de: 'profissional', texto: 'Oi! Obrigado(a) pelo contato' + (cv.vagaTitulo ? ' sobre a vaga de ' + cv.vagaTitulo : '') + '. Pode perguntar o que precisar.' };
+    }
+    return { de: 'empresa', texto: 'Olá! Recebemos sua mensagem' + (cv.vagaTitulo ? ' sobre a vaga de ' + cv.vagaTitulo : '') + '. Em breve alguém do time responde por aqui.' };
+  }
+
+  function waEstado(cv, como) {
+    var outro = como === 'empresa' ? 'profissional' : 'empresa';
+    if (cv.compartilhou[como] && cv.compartilhou[outro]) return 'liberado';
+    if (cv.compartilhou[como]) return 'aguardando';
+    if (cv.compartilhou[outro]) return 'pedido';
+    return 'nenhum';
+  }
+
+  // Só o canal do profissional varia (whatsapp/sms/email); a empresa sempre usa WhatsApp neste protótipo.
+  function canalDoOutro(cv, como) {
+    if (como !== 'empresa') return 'whatsapp';
+    var p = prof(cv.profissionalId);
+    return (p && p.canal) || 'whatsapp';
+  }
+
+  function canalRotulo(canal) {
+    return canal === 'sms' ? 'Enviar SMS' : (canal === 'email' ? 'Enviar e-mail' : 'Chamar no WhatsApp');
+  }
+
+  function waBarHtml(cv, como) {
+    var outroNome = como === 'empresa' ? firstName(prof(cv.profissionalId)) : empresaDe(cv.empresaId).nome;
+    var estado = waEstado(cv, como);
+    if (estado === 'nenhum') {
+      return '<div class="wa-bar"><span class="wa-msg">Contato direto ainda não liberado</span>' +
+        '<button type="button" class="btn btn-outline" data-wa="compartilhar">Compartilhar meu WhatsApp</button></div>';
+    }
+    if (estado === 'aguardando') {
+      return '<div class="wa-bar"><span class="wa-msg">Aguardando ' + esc(outroNome) + '</span></div>';
+    }
+    if (estado === 'pedido') {
+      return '<div class="wa-bar"><span class="wa-msg">' + esc(outroNome) + ' quer compartilhar o WhatsApp. Compartilhar o seu?</span>' +
+        '<button type="button" class="btn btn-primary" data-wa="compartilhar">Compartilhar o meu WhatsApp</button></div>';
+    }
+    var canal = canalDoOutro(cv, como);
+    return '<div class="wa-bar wa-liberado"><span class="wa-msg">' + icon('check', 16, { stroke: 2.4 }) + 'Contato liberado</span>' +
+      '<button type="button" class="btn btn-primary" data-wa="contato">' + esc(canalRotulo(canal)) + '</button></div>';
+  }
+
+  // Cria (ou reaproveita) a conversa entre a Empresa Exemplo e um profissional.
+  function iniciarConversaEmpresa(profId, vagaEmpresaId, vagaTitulo) {
+    return obterOuCriarConversa({
+      ladoDono: profId === PR_ID ? 'ambos' : 'empresa',
+      profissionalId: profId, empresaId: 'empresa-exemplo',
+      vagaTitulo: vagaTitulo || '', vagaEmpresaId: vagaEmpresaId || null,
+      vagaProfId: (vagaEmpresaId && window.MOCK.vagaLink[vagaEmpresaId]) || null
+    });
+  }
+
+  // Cria (ou reaproveita) a conversa entre o João Silva e uma empresa.
+  function iniciarConversaProfissional(empresaId, vagaProfId, vagaTitulo) {
+    var vagaEmpresaId = null;
+    if (vagaProfId) {
+      Object.keys(window.MOCK.vagaLink).some(function (k) {
+        if (window.MOCK.vagaLink[k] === vagaProfId) { vagaEmpresaId = k; return true; }
+        return false;
+      });
+    }
+    return obterOuCriarConversa({
+      ladoDono: empresaId === 'empresa-exemplo' ? 'ambos' : 'profissional',
+      profissionalId: PR_ID, empresaId: empresaId,
+      vagaTitulo: vagaTitulo || '', vagaEmpresaId: vagaEmpresaId, vagaProfId: vagaProfId || null
+    });
   }
 
   function E() { return window.MOCK.empresa; }
@@ -192,7 +358,7 @@
   function q(v) { return encodeURIComponent(v); }
 
   // A contratação que o João Silva confirma (jornada do profissional) é a mesma que a empresa marca.
-  // Devolve 'sim' | 'nao' | null para a vaga da confirmação; null para as demais vagas.
+  // Devolve null | 'confirmado' | 'contestado' para a vaga da confirmação; null para as demais vagas.
   function confirmacaoDaVaga(vagaId) {
     return vagaId === window.MOCK.profissional.confirmacao.vagaId ? loadP().confirmacao : null;
   }
@@ -201,16 +367,43 @@
     var conf = confirmacaoDaVaga(vagaId);
     return (E().candidatos[vagaId] || []).map(function (c) {
       var st = s.status[vagaId + ':' + c.id] || c.status;
-      if (conf && c.id === window.MOCK.profissional.id) st = conf === 'sim' ? 'contratado' : 'nao';
-      return { id: c.id, atende: c.atende, status: st };
+      if (conf && c.id === PR_ID) st = 'contratado';
+      return { id: c.id, atende: c.atende, status: st, data: c.data };
     });
   }
 
-  // Pessoas marcadas como contratadas, aguardando confirmação (se o profissional recusou, sai da lista).
+  // Pessoas marcadas como contratadas, aguardando confirmação.
   function preench(s, vagaId) {
     var ids = s.preenchidas[vagaId];
-    if (ids && confirmacaoDaVaga(vagaId) === 'nao') ids = ids.filter(function (id) { return id !== window.MOCK.profissional.id; });
     return ids && ids.length ? ids : null;
+  }
+
+  function combinadoDe(s, vagaId) {
+    return (s.combinados && s.combinados[vagaId]) || null;
+  }
+
+  function combSalario(comb) {
+    var fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: comb.moeda });
+    var per = E().formulario.periodos.filter(function (p) { return p.id === comb.periodo; })[0].rotulo;
+    return fmt.format(comb.valor) + ' ' + per;
+  }
+
+  function combinadoResumoHtml(comb) {
+    return '<dl class="summary">' +
+      '<div><dt>Função</dt><dd>' + esc(comb.funcao) + '</dd></div>' +
+      '<div><dt>Tipo de contratação</dt><dd>' + esc(comb.tipoContratacao) + '</dd></div>' +
+      '<div><dt>Salário</dt><dd>' + esc(combSalario(comb)) + '</dd></div>' +
+      '<div><dt>Início</dt><dd>' + dataBR(comb.dataInicio) + '</dd></div>' +
+      '<div><dt>Jornada</dt><dd>' + esc(comb.jornada) + '</dd></div></dl>';
+  }
+
+  // Texto de referência ao combinado, citado dentro de uma pergunta de avaliação.
+  function refTexto(chave, comb) {
+    if (chave === 'funcao') return comb.funcao;
+    if (chave === 'jornada') return comb.jornada;
+    if (chave === 'salario') return combSalario(comb);
+    if (chave === 'condicoes') return 'início em ' + dataBR(comb.dataInicio) + ', ' + comb.tipoContratacao;
+    return '';
   }
 
   function indicadosDe(s, v) {
@@ -238,8 +431,12 @@
 
   // Status e detalhe de uma vaga, levando em conta o que foi feito na demonstração.
   function vagaInfo(s, v) {
-    if (confirmacaoDaVaga(v.id) === 'sim' && v.status !== 'Preenchida') {
-      return { status: 'Preenchida', chip: 'blue', detalhe: 'Preenchida por ' + prof(window.MOCK.profissional.id).nome + ' · confirmado' };
+    var conf = confirmacaoDaVaga(v.id);
+    if (conf === 'confirmado' && v.status !== 'Preenchida') {
+      return { status: 'Preenchida', chip: 'blue', detalhe: 'Preenchida por ' + prof(PR_ID).nome + ' · confirmado' };
+    }
+    if (conf === 'contestado' && v.status !== 'Preenchida') {
+      return { status: 'Preenchida · combinado contestado', chip: 'amber', detalhe: prof(PR_ID).nome + ' apontou uma diferença no combinado.' };
     }
     var ids = preench(s, v.id);
     if (ids && v.status !== 'Preenchida') {
@@ -264,7 +461,7 @@
       { id: 'inicio', label: 'Início', icon: 'home', href: 'empresa.html' },
       { id: 'vagas', label: 'Vagas', icon: 'briefcase' },
       { id: 'candidatos', label: 'Candidatos', icon: 'users', href: 'candidatos.html' },
-      { id: 'mensagens', label: 'Mensagens', icon: 'message' },
+      { id: 'mensagens', label: 'Mensagens', icon: 'message', href: 'mensagens.html?como=empresa' },
       { id: 'empresa', label: 'Empresa', icon: 'building' }
     ], current);
   }
@@ -397,6 +594,58 @@
     $('#done-title').focus();
   }
 
+  /* ---------- Confirmação/contestação do combinado (usada na tela inicial e em Minhas candidaturas) ---------- */
+
+  function paintCombinado(container, comb) {
+    function render(mostrarCompose) {
+      var sp = loadP();
+      var estado = sp.confirmacao === 'confirmado' ? 'confirmado' : (sp.confirmacao === 'contestado' ? 'contestado' : 'pendente');
+      var html;
+      if (mostrarCompose) {
+        html = combinadoResumoHtml(comb) +
+          field('contestacao-texto', 'O que está diferente do combinado?', 'textarea', 'rows="3" maxlength="300"', '',
+            { req: true, hint: 'Conte o que mudou. Isso vai para a empresa revisar.' }) +
+          '<div class="btn-row"><button type="button" class="btn btn-primary" data-cf="enviar-contestacao">Enviar contestação</button>' +
+          '<button type="button" class="btn btn-outline" data-cf="cancelar-contestacao">Cancelar</button></div>';
+      } else if (estado === 'pendente') {
+        html = '<h3 class="card-title">Confirme a contratação</h3>' + combinadoResumoHtml(comb) +
+          '<div class="btn-row"><button type="button" class="btn btn-primary" data-cf="confirmar">Confirmar</button>' +
+          '<button type="button" class="btn btn-outline" data-cf="contestar">Algo está diferente</button></div>';
+      } else if (estado === 'contestado') {
+        html = '<h3 class="card-title">Contestação enviada</h3>' +
+          '<p class="row-sub">Você disse: “' + esc(sp.contestacaoTexto || '') + '”. A empresa foi avisada e vai revisar o combinado.</p>';
+      } else {
+        html = '<h3 class="card-title">Contratação confirmada</h3>' +
+          '<p class="row-sub">O trabalho entra no seu histórico verificado. A avaliação fica disponível ao fim do vínculo.</p>';
+      }
+      container.innerHTML = html;
+      container.querySelectorAll('[data-cf]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var act = b.getAttribute('data-cf');
+          if (act === 'confirmar') {
+            var st = loadP(); st.confirmacao = 'confirmado'; saveP(st);
+            render(false); say('Contratação confirmada.'); atualizarPendTxt();
+          } else if (act === 'contestar') {
+            render(true);
+          } else if (act === 'cancelar-contestacao') {
+            render(false);
+          } else if (act === 'enviar-contestacao') {
+            var val = container.querySelector('#contestacao-texto').value.trim();
+            if (!check([{ id: 'contestacao-texto', ok: val.length > 0, msg: 'Conte o que está diferente antes de enviar.' }])) return;
+            var st2 = loadP(); st2.confirmacao = 'contestado'; st2.contestacaoTexto = val; saveP(st2);
+            render(false); say('Contestação enviada.'); atualizarPendTxt();
+          }
+        });
+      });
+    }
+    render(false);
+  }
+
+  function atualizarPendTxt() {
+    var el = $('#pend-txt');
+    if (el) el.textContent = pendTexto(loadP());
+  }
+
   /* ---------- Login ---------- */
 
   function initLogin() {
@@ -421,8 +670,12 @@
     // Protótipo: não há autenticação. Qualquer e-mail e senha entram.
     $('#login-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      // Cada entrada recomeça a demonstração (empresa e profissional).
-      try { window.sessionStorage.removeItem(KEY); window.sessionStorage.removeItem(KEY_P); } catch (err) { /* ignora */ }
+      // Cada entrada recomeça a demonstração (empresa, profissional e conversas).
+      try {
+        window.sessionStorage.removeItem(KEY);
+        window.sessionStorage.removeItem(KEY_P);
+        window.sessionStorage.removeItem(KEY_CHAT);
+      } catch (err) { /* ignora */ }
       window.location.href = role === 'empresa' ? 'empresa.html' : 'profissional.html';
     });
 
@@ -453,13 +706,20 @@
     var itens = 0;
     var pend = d.pendencias.map(function (p) {
       var v = p.vaga ? vagaPorId(s, p.vaga) : null;
-      if (p.id === 'preencher' && confirmacaoDaVaga(p.vaga) === 'sim') {
-        return rowStatic({ icone: 'check', tom: 'blue', titulo: 'Contratação de ' + prof(window.MOCK.profissional.id).nome + ' confirmada',
-          texto: 'Vaga de ' + v.titulo + ' · o vínculo já conta no histórico e na reputação dos dois.' });
-      }
-      if (p.id === 'preencher' && preench(s, p.vaga)) {
-        return rowStatic({ icone: 'clock', tom: 'amber', titulo: 'Aguardando confirmação de ' + nomesDe(preench(s, p.vaga)),
-          texto: 'Vaga de ' + v.titulo + ' · o vínculo só conta depois que a pessoa confirmar.' });
+      if (p.id === 'preencher') {
+        var conf = confirmacaoDaVaga(p.vaga);
+        if (conf === 'confirmado') {
+          return rowStatic({ icone: 'check', tom: 'blue', titulo: 'Contratação de ' + prof(PR_ID).nome + ' confirmada',
+            texto: 'Vaga de ' + v.titulo + ' · o vínculo já conta no histórico e na reputação dos dois.' });
+        }
+        if (conf === 'contestado') {
+          return rowStatic({ icone: 'message', tom: 'amber', titulo: 'Combinado contestado por ' + prof(PR_ID).nome,
+            texto: 'Vaga de ' + v.titulo + ' · “' + loadP().contestacaoTexto + '”' });
+        }
+        if (preench(s, p.vaga)) {
+          return rowStatic({ icone: 'clock', tom: 'amber', titulo: 'Aguardando confirmação de ' + nomesDe(preench(s, p.vaga)),
+            texto: 'Vaga de ' + v.titulo + ' · o vínculo só conta depois que a pessoa confirmar.' });
+        }
       }
       if (p.id === 'avaliar' && s.avaliados[p.profissional]) {
         return rowStatic({ icone: 'check', tom: 'blue', titulo: 'Avaliação de ' + prof(p.profissional).nome + ' enviada',
@@ -529,16 +789,21 @@
       var v = vagaPorId(s, selecionada);
       $('#ind-list').innerHTML = (indicadosDe(s, v) || []).map(function (i) {
         return profCard(i.id, i.atende, requisitosDe(v),
-          '<div class="btn-row"><a href="#" class="btn btn-primary" data-todo="Convite enviado para ' + esc(prof(i.id).nome) + ' (simulação).">Convidar para a vaga</a>' +
+          '<div class="btn-row"><button type="button" class="btn btn-primary" data-convidar="' + esc(i.id) + '" data-cv-vaga="' + esc(v.id) + '">Convidar para a vaga</button>' +
           '<a href="' + esc(perfilHref(i.id, v.id)) + '" class="btn btn-outline">Ver perfil</a></div>');
       }).join('');
     }
 
     $('#content').addEventListener('click', function (e) {
       var b = e.target.closest('[data-vaga]');
-      if (!b) return;
-      selecionada = b.getAttribute('data-vaga');
-      renderIndicados();
+      if (b) { selecionada = b.getAttribute('data-vaga'); renderIndicados(); return; }
+      var cv = e.target.closest('[data-convidar]');
+      if (cv) {
+        var candId = cv.getAttribute('data-convidar'), vagaIdCtx = cv.getAttribute('data-cv-vaga');
+        var vObj = vagaPorId(load(), vagaIdCtx);
+        iniciarConversaEmpresa(candId, vagaIdCtx, vObj ? vObj.titulo : '');
+        toast('Convite enviado para ' + prof(candId).nome + ' (simulação).');
+      }
     });
 
     if (selecionada) renderIndicados();
@@ -811,14 +1076,16 @@
           var p = prof(c.id);
           var aguardando = (preench(s, v.id) || []).indexOf(c.id) !== -1;
           var extra = aguardando ? '<span class="chip amber">Aguardando confirmação</span>'
-            : (c.status === 'contratado' ? '<span class="chip blue">Contratado</span>' : '');
+            : (c.status === 'contratado' ? '<span class="chip blue">Contratado</span>'
+            : (c.status === 'novo' && c.data ? '<span class="chip amber">Responder até ' + maisDias(c.data, 7) + '</span>' : ''));
           var seletor = c.status === 'contratado' ? '' :
             '<label class="status-select"><span class="visually-hidden">Mudar status de ' + esc(p.nome) + '</span>' +
             '<select data-cand="' + esc(c.id) + '">' + E().statusCandidato.filter(function (st) { return st.manual !== false; }).map(function (st) {
               return '<option value="' + st.id + '"' + (st.id === c.status ? ' selected' : '') + '>' + esc(st.singular) + '</option>';
             }).join('') + '</select></label>';
           return profCard(c.id, c.atende, requisitosDe(v),
-            '<div class="btn-row"><a href="' + esc(perfilHref(c.id, v.id)) + '" class="btn btn-primary">Ver perfil</a>' + seletor + '</div>', extra);
+            '<div class="btn-row"><a href="' + esc(perfilHref(c.id, v.id)) + '" class="btn btn-primary">Ver perfil</a>' +
+            '<button type="button" class="btn btn-outline" data-conversar="' + esc(c.id) + '">Conversar</button>' + seletor + '</div>', extra);
         }).join('');
       }
       $('#cand-list').innerHTML = html;
@@ -840,6 +1107,17 @@
       paint();
       say(prof(sel.getAttribute('data-cand')).nome + ' movido para ' + statusLabel(sel.value).singular + '.');
       $('#cand-list').focus();
+    });
+
+    $('#cand-list').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-conversar]');
+      if (!b) return;
+      var candId = b.getAttribute('data-conversar');
+      var st = load();
+      var atual = st.status[v.id + ':' + candId];
+      if (!atual || atual === 'novo') { st.status[v.id + ':' + candId] = 'conversa'; save(st); }
+      var conv = iniciarConversaEmpresa(candId, v.id, v.titulo);
+      window.location.href = 'conversa.html?id=' + q(conv.id) + '&como=empresa';
     });
 
     paint();
@@ -912,7 +1190,7 @@
         (atende !== null ? '<div class="chips"><span class="chip green">Atende ' + atende + ' de ' + requisitosDe(vaga) + ' requisitos · ' + esc(vaga.titulo) + '</span></div>' : '') +
         '<div class="btn-row"><button type="button" class="btn btn-primary" id="convidar"' + (s.convites[conviteKey] ? ' aria-disabled="true"' : '') + '>' +
           (s.convites[conviteKey] ? icon('check', 16, { stroke: 2.4 }) + 'Convite enviado' : 'Convidar para a vaga') + '</button>' +
-        '<a href="#" class="btn btn-outline" data-todo="A conversa por mensagem ainda não faz parte do protótipo (simulação).">Enviar mensagem</a></div>' +
+        '<button type="button" class="btn btn-outline" id="msg-btn">Enviar mensagem</button></div>' +
         (vaga ? '<p class="row-sub">Vaga do convite: ' + esc(vaga.titulo) + '</p>' : '') +
       '</section>' +
 
@@ -946,6 +1224,16 @@
       this.innerHTML = icon('check', 16, { stroke: 2.4 }) + 'Convite enviado';
       toast('Convite enviado para ' + p.nome + ' (simulação).');
     });
+
+    $('#msg-btn').addEventListener('click', function () {
+      if (vaga) {
+        var st2 = load();
+        var atual = st2.status[vaga.id + ':' + id];
+        if (!atual || atual === 'novo') { st2.status[vaga.id + ':' + id] = 'conversa'; save(st2); }
+      }
+      var conv = iniciarConversaEmpresa(id, vaga ? vaga.id : null, vaga ? vaga.titulo : '');
+      window.location.href = 'conversa.html?id=' + q(conv.id) + '&como=empresa';
+    });
   }
 
   /* ---------- Empresa: marcar vaga como preenchida ---------- */
@@ -960,10 +1248,11 @@
 
     function aguardando(ids) {
       var nomes = nomesDe(ids);
+      subTopbar('Marcar como preenchida', 'empresa.html');
       showDone({
         icone: 'clock', tom: 'amber',
         titulo: 'Aguardando confirmação de ' + nomes,
-        texto: 'Enviamos um pedido de confirmação. Só depois que ' + esc(ids.length > 1 ? 'as pessoas confirmarem' : firstName(prof(ids[0])) + ' confirmar') +
+        texto: 'Registramos o combinado e enviamos um pedido de confirmação. Só depois que ' + esc(ids.length > 1 ? 'as pessoas confirmarem' : firstName(prof(ids[0])) + ' confirmar') +
           ', o vínculo entra no histórico e na reputação dos dois lados.',
         extra: '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Em Minhas vagas, “' + esc(v.titulo) + '” aparece como “Preenchida · aguardando confirmação”.</span></p>',
         acoes: '<a href="empresa.html?aba=vagas" class="btn btn-primary">Ver minhas vagas</a>' +
@@ -981,59 +1270,120 @@
       return;
     }
 
-    var elegiveis = ordenar(candidatosDe(s, v.id).filter(function (c) { return c.status === 'analise' || c.status === 'entrevista'; }));
+    var elegiveis = ordenar(candidatosDe(s, v.id).filter(function (c) { return c.status === 'conversa'; }));
     var max = v.posicoes || 1;
     var tipo = max > 1 ? 'checkbox' : 'radio';
 
     if (!elegiveis.length) {
-      $('#content').innerHTML = '<div class="empty"><p class="row-title">Ainda não há candidatos em análise ou entrevista.</p>' +
-        '<p class="row-sub">Mova um candidato para “Em análise” ou “Entrevista” e volte aqui para indicar quem preencheu a vaga.</p>' +
+      $('#content').innerHTML = '<div class="empty"><p class="row-title">Ainda não há candidatos em conversa.</p>' +
+        '<p class="row-sub">Inicie uma conversa com um candidato e volte aqui para indicar quem preencheu a vaga.</p>' +
         '<a href="candidatos.html?vaga=' + q(v.id) + '" class="btn btn-primary">Ver candidatos</a></div>';
       return;
     }
 
-    $('#content').innerHTML =
-      '<form id="fill-form" novalidate>' +
-      '<div class="greeting"><h2 class="page-title">Quem preencheu a vaga de ' + esc(v.titulo) + '?</h2>' +
-        '<p>' + (max > 1 ? 'Esta vaga tem ' + max + ' posições. Selecione até ' + max + ' pessoas.' : 'Selecione a pessoa contratada.') + '</p></div>' +
-      '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>A pessoa recebe um pedido de confirmação. Só depois de confirmar, o vínculo entra no histórico e na reputação dos dois lados.</span></p>' +
-      '<fieldset class="field group" id="f-quem" aria-describedby="quem-err"><legend class="visually-hidden">Candidatos em análise ou entrevista</legend>' +
-        elegiveis.map(function (c) {
-          var p = prof(c.id);
-          return '<label class="choice"><input type="' + tipo + '" name="quem" value="' + esc(c.id) + '" class="choice-input">' +
-            '<span class="choice-body"><span class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</span>' +
-            '<span class="row-main"><span class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</span>' +
-            '<span class="row-sub">' + esc(p.resumo) + '</span>' +
-            '<span class="chips"><span class="chip">' + esc(statusLabel(c.status).singular) + '</span><span class="chip green">Atende ' + c.atende + ' de ' + requisitosDe(v) + '</span></span></span></span></label>';
-        }).join('') +
-        '<p class="field-error" id="quem-err" hidden></p></fieldset>' +
-      '<div class="btn-row form-actions"><button type="submit" class="btn btn-primary">Enviar pedido de confirmação</button>' +
-        '<a href="candidatos.html?vaga=' + q(v.id) + '" class="btn btn-outline">Cancelar</a></div>' +
-      '</form>';
+    renderEscolha();
 
-    $('#fill-form').addEventListener('submit', function (e) {
-      e.preventDefault();
-      var marcados = Array.prototype.map.call(this.querySelectorAll('input[name="quem"]:checked'), function (i) { return i.value; });
-      var msg = !marcados.length ? (max > 1 ? 'Selecione pelo menos uma pessoa.' : 'Selecione a pessoa contratada.')
-        : (marcados.length > max ? 'A vaga tem ' + max + ' posições: selecione no máximo ' + max + ' pessoas.' : '');
-      if (!check([{ id: 'quem', ok: !msg, msg: msg }])) return;
-      var st = load();
-      st.preenchidas[v.id] = marcados;
-      save(st);
-      aguardando(marcados);
-    });
+    function renderEscolha() {
+      subTopbar('Marcar como preenchida', 'empresa.html');
+      $('#content').innerHTML =
+        '<form id="fill-form" novalidate>' +
+        '<div class="greeting"><h2 class="page-title">Quem preencheu a vaga de ' + esc(v.titulo) + '?</h2>' +
+          '<p>' + (max > 1 ? 'Esta vaga tem ' + max + ' posições. Selecione até ' + max + ' pessoas.' : 'Selecione a pessoa contratada.') + '</p></div>' +
+        '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>Depois de escolher, você registra o combinado. A pessoa recebe um pedido de confirmação; só depois de confirmar, o vínculo entra no histórico e na reputação dos dois lados.</span></p>' +
+        '<fieldset class="field group" id="f-quem" aria-describedby="quem-err"><legend class="visually-hidden">Candidatos em conversa</legend>' +
+          elegiveis.map(function (c) {
+            var p = prof(c.id);
+            return '<label class="choice"><input type="' + tipo + '" name="quem" value="' + esc(c.id) + '" class="choice-input">' +
+              '<span class="choice-body"><span class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</span>' +
+              '<span class="row-main"><span class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</span>' +
+              '<span class="row-sub">' + esc(p.resumo) + '</span>' +
+              '<span class="chips"><span class="chip">' + esc(statusLabel(c.status).singular) + '</span><span class="chip green">Atende ' + c.atende + ' de ' + requisitosDe(v) + '</span></span></span></span></label>';
+          }).join('') +
+          '<p class="field-error" id="quem-err" hidden></p></fieldset>' +
+        '<div class="btn-row form-actions"><button type="submit" class="btn btn-primary">Continuar</button>' +
+          '<a href="candidatos.html?vaga=' + q(v.id) + '" class="btn btn-outline">Cancelar</a></div>' +
+        '</form>';
+
+      $('#fill-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var marcados = Array.prototype.map.call(this.querySelectorAll('input[name="quem"]:checked'), function (i) { return i.value; });
+        var msg = !marcados.length ? (max > 1 ? 'Selecione pelo menos uma pessoa.' : 'Selecione a pessoa contratada.')
+          : (marcados.length > max ? 'A vaga tem ' + max + ' posições: selecione no máximo ' + max + ' pessoas.' : '');
+        if (!check([{ id: 'quem', ok: !msg, msg: msg }])) return;
+        renderCombinado(marcados);
+      });
+    }
+
+    function renderCombinado(marcados) {
+      var f = E().formulario;
+      subTopbar('Registrar o combinado', 'candidatos.html?vaga=' + q(v.id));
+      $('#content').innerHTML =
+        '<form id="comb-form" class="form" novalidate>' +
+        '<div class="greeting"><h2 class="page-title">Registrar o combinado</h2>' +
+          '<p>Isso ajuda ' + esc(nomesDe(marcados)) + ' a confirmar com segurança, e serve de referência nas avaliações.</p></div>' +
+
+        field('funcao', 'Função', 'input', 'type="text" maxlength="60" autocomplete="off" value="' + esc(v.titulo) + '"', '', { req: true }) +
+        group('tipo-contratacao', 'Tipo de contratação', pills('tipo-contratacao', f.tipos.map(function (t) { return { id: t, rotulo: t }; })), { req: true }) +
+
+        group('salario2', 'Salário combinado',
+          '<div class="form-grid">' +
+            '<label class="mini"><span>Moeda</span><select id="moeda2">' + options(f.moedas) + '</select></label>' +
+            '<label class="mini"><span>Período</span><select id="periodo2">' + options(f.periodos) + '</select></label>' +
+            '<label class="mini"><span>Valor</span><input id="valor2" data-ctl type="number" inputmode="decimal" min="0" step="any" placeholder="0" aria-describedby="salario2-err"></label>' +
+          '</div>', { req: true }) +
+
+        field('data-inicio', 'Data de início', 'input', 'type="date"', '', { req: true }) +
+        field('jornada', 'Jornada / horário', 'input', 'type="text" maxlength="80" autocomplete="off" placeholder="Ex.: Seg a sex, 9h às 18h"', '', { req: true }) +
+
+        '<p class="form-status" id="form-status" role="alert"></p>' +
+        '<div class="btn-row form-actions"><button type="submit" class="btn btn-primary">Registrar e enviar pedido</button>' +
+          '<a href="candidatos.html?vaga=' + q(v.id) + '" class="btn btn-outline">Cancelar</a></div>' +
+        '<div class="visually-hidden" role="status" id="live"></div>' +
+        '</form>';
+
+      $('#comb-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var tipoSel = $('#comb-form').querySelector('input[name="tipo-contratacao"]:checked');
+        var valor = $('#valor2').value;
+        var ok = check([
+          { id: 'funcao', ok: $('#funcao').value.trim().length > 0, msg: 'Informe a função combinada.' },
+          { id: 'tipo-contratacao', ok: !!tipoSel, msg: 'Escolha o tipo de contratação.' },
+          { id: 'salario2', ok: !!valor && Number(valor) > 0, msg: 'Informe o valor do salário combinado.' },
+          { id: 'data-inicio', ok: !!$('#data-inicio').value, msg: 'Informe a data de início.' },
+          { id: 'jornada', ok: $('#jornada').value.trim().length > 0, msg: 'Informe a jornada ou horário combinado.' }
+        ]);
+        $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
+        if (!ok) return;
+
+        var comb = {
+          funcao: $('#funcao').value.trim(),
+          tipoContratacao: tipoSel.value,
+          moeda: $('#moeda2').value, periodo: $('#periodo2').value, valor: Number(valor),
+          dataInicio: $('#data-inicio').value,
+          jornada: $('#jornada').value.trim()
+        };
+        var st = load();
+        st.preenchidas[v.id] = marcados;
+        st.combinados[v.id] = comb;
+        save(st);
+        aguardando(marcados);
+      });
+    }
   }
 
   /* ---------- Avaliação cega (empresa avalia profissional e profissional avalia empresa) ---------- */
 
-  // cfg: { aviso (html), cabecalho (html), perguntas, respostas, limite, cancelar (href) }
+  // cfg: { aviso (html), cabecalho (html), perguntas, respostas, limite, cancelar (href), combinado }
   function avaliacaoFormHtml(cfg) {
     return '<form id="rate-form" class="form" novalidate>' +
       '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span><strong>Avaliação cega:</strong> ' + cfg.aviso + '</span></p>' +
       cfg.cabecalho +
 
       cfg.perguntas.map(function (pg) {
-        return group('q-' + pg.id, pg.texto, pills('q-' + pg.id, cfg.respostas.map(function (r) { return { id: r, rotulo: r }; })), { req: true });
+        var texto = (cfg.combinado && pg.ref)
+          ? pg.texto.replace(/\?\s*$/, '') + ' (' + refTexto(pg.ref, cfg.combinado) + ')?'
+          : pg.texto;
+        return group('q-' + pg.id, texto, pills('q-' + pg.id, cfg.respostas.map(function (r) { return { id: r, rotulo: r }; })), { req: true });
       }).join('') +
 
       group('nota', 'Nota geral',
@@ -1116,7 +1466,8 @@
       cabecalho: '<div class="media center"><div class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
         '<div class="row-main"><div class="row-title" style="font-weight:800">' + nomeComSelo(p) + '</div>' +
         '<div class="row-sub">' + esc(pend.vaga ? 'Vaga: ' + pend.vaga : p.resumo) + '</div></div></div>',
-      perguntas: A.perguntas, respostas: A.respostas, limite: A.limiteComentario, cancelar: 'empresa.html'
+      perguntas: A.perguntas, respostas: A.respostas, limite: A.limiteComentario, cancelar: 'empresa.html',
+      combinado: pend.combinado || null
     };
 
     $('#content').innerHTML = avaliacaoFormHtml(cfg);
@@ -1141,20 +1492,9 @@
       { id: 'inicio', label: 'Início', icon: 'home', href: 'profissional.html' },
       { id: 'buscar', label: 'Buscar', icon: 'search' },
       { id: 'candidaturas', label: 'Candidaturas', icon: 'clipboard', href: 'candidaturas.html' },
-      { id: 'mensagens', label: 'Mensagens', icon: 'message' },
+      { id: 'mensagens', label: 'Mensagens', icon: 'message', href: 'mensagens.html?como=profissional' },
       { id: 'perfil', label: 'Perfil', icon: 'user' }
     ], current);
-  }
-
-  function dataBR(iso) {
-    var p = iso.split('-');
-    return p[2] + '/' + p[1] + '/' + p[0];
-  }
-
-  function hojeISO() {
-    var d = new Date();
-    function dois(n) { return (n < 10 ? '0' : '') + n; }
-    return d.getFullYear() + '-' + dois(d.getMonth() + 1) + '-' + dois(d.getDate());
   }
 
   // Quantos requisitos da vaga o João atende, e o que falta.
@@ -1201,23 +1541,16 @@
     var e = empresaDe(c.empresa);
     return '<div class="media"><div class="icon-tile blue">' + icon('check', 22, { stroke: 2 }) + '</div>' +
       '<div class="row-main"><div class="row-title">Confirme sua contratação</div>' +
-      '<div class="row-sub">' + esc(e.nome) + ' indicou você como contratado para ' + esc(c.vaga) + '. Ao confirmar, o trabalho entra no seu histórico verificado.</div></div></div>' +
-      '<div class="btn-row"><button type="button" class="btn btn-primary" data-confirm="sim">Confirmar</button>' +
-      '<button type="button" class="btn btn-outline" data-confirm="nao">Não fui contratado</button></div>';
-  }
-
-  function confirmDone(c, ok) {
-    var e = empresaDe(c.empresa);
-    return '<div class="media"><div class="icon-tile ' + (ok ? 'blue' : '') + '">' + icon('check', 22, { stroke: 2 }) + '</div>' +
-      '<div class="row-main"><div class="row-title">' + (ok ? 'Contratação confirmada' : 'Resposta enviada') + '</div>' +
-      '<div class="row-sub">' + (ok
-        ? 'O trabalho na ' + esc(e.nome) + ' entrou no seu histórico verificado. A avaliação fica disponível ao fim do vínculo.'
-        : esc(e.nome) + ' foi avisada de que você não foi contratado para esta vaga.') + '</div></div></div>' +
-      (ok ? '<div class="btn-row"><a href="candidaturas.html" class="btn btn-outline">Ver em Minhas candidaturas</a></div>' : '');
+      '<div class="row-sub">' + esc(e.nome) + ' indicou você como contratado para ' + esc(c.vaga) + '. Ao confirmar, o trabalho entra no seu histórico verificado.</div></div></div>';
   }
 
   function pendTexto(sp) {
-    var n = (sp.confirmacao ? 0 : 1) + (sp.avaliados[PR().avaliacao.empresa] ? 0 : 1);
+    var s = load();
+    var vagaIdEmp = PR().confirmacao.vagaId;
+    var marcados = preench(s, vagaIdEmp);
+    var comb = combinadoDe(s, vagaIdEmp);
+    var temCombinado = marcados && comb && !sp.confirmacao;
+    var n = (temCombinado ? 1 : 0) + (sp.avaliados[PR().avaliacao.empresa] ? 0 : 1);
     return n === 0 ? 'Nenhuma pendência hoje. Veja as vagas indicadas.'
       : 'Você tem ' + plural(n, 'pendência', 'pendências') + ' e vagas novas indicadas.';
   }
@@ -1227,6 +1560,11 @@
     var rep = d.reputacao;
     var sp = loadP();
     var av = d.avaliacao, avEmpresa = empresaDe(av.empresa);
+    var s = load();
+    var vagaIdEmp = d.confirmacao.vagaId;
+    var marcados = preench(s, vagaIdEmp);
+    var comb = combinadoDe(s, vagaIdEmp);
+    var mostrarCombinado = !!(marcados && comb);
 
     $('#topbar').innerHTML =
       brandMark() +
@@ -1241,17 +1579,15 @@
           texto: 'Prazo termina em ' + plural(av.prazoDias, 'dia', 'dias') + '. Sua avaliação fica oculta até a empresa enviar a dela.',
           href: 'avaliar-empresa.html?id=' + q(av.empresa) });
 
+    var pendItens = (mostrarCombinado ? '<div class="card card-highlight" id="confirm-card" aria-live="polite"></div>' : '') + avaliar;
+
     $('#content').innerHTML =
       '<div class="stack"><div class="greeting"><h1>Olá, ' + esc(d.nome) + '</h1>' +
         '<p id="pend-txt">' + esc(pendTexto(sp)) + '</p></div>' +
         '<a href="#" class="row-link" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px" data-todo="' + TODO + '">' +
           '<span style="color:var(--ink)">' + icon('search', 20, { stroke: 2 }) + '</span>Buscar vagas, cargos ou empresas</a></div>' +
 
-      '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' +
-        '<div class="card card-highlight" id="confirm-card" aria-live="polite">' +
-          (sp.confirmacao ? confirmDone(d.confirmacao, sp.confirmacao === 'sim') : confirmPending(d.confirmacao)) + '</div>' +
-        avaliar +
-      '</section>' +
+      '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pendItens + '</section>' +
 
       accordion('acc-rep', 'Minha reputação', 'Nota ' + rep.nota + ' · ' + plural(rep.trabalhos, 'trabalho', 'trabalhos'),
         '<div class="rep-grid">' + repStat(rep.nota, 'Nota geral') + repStat(rep.trabalhos, 'Trabalhos verificados') + repStat(rep.contratariamDeNovo, 'Contratariam de novo') + '</div>' +
@@ -1259,19 +1595,11 @@
 
       accordion('acc-vagas', 'Vagas indicadas para você', plural(d.vagasIndicadas.length, 'vaga indicada', 'vagas indicadas'),
         '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Combinam com o seu perfil e são de empresas com reputação no mesmo nível da sua.</span></p>' +
-        d.vagasIndicadas.map(vagaCard).join('') + accMore('Ver todas'));
+        d.vagasIndicadas.map(vagaCard).join('') + accMore('Ver todas')) +
 
-    // Confirmação de contratação: vale também para a jornada da empresa.
-    $('#confirm-card').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-confirm]');
-      if (!b) return;
-      var ok = b.getAttribute('data-confirm') === 'sim';
-      var st = loadP();
-      st.confirmacao = ok ? 'sim' : 'nao';
-      saveP(st);
-      this.innerHTML = confirmDone(d.confirmacao, ok);
-      $('#pend-txt').textContent = pendTexto(st);
-    });
+      '<div class="visually-hidden" role="status" id="live"></div>';
+
+    if (mostrarCombinado) paintCombinado($('#confirm-card'), comb);
 
     // Vindo de outra tela, já abre a seção pedida.
     var aba = { vagas: 'acc-vagas', reputacao: 'acc-rep' }[params.get('aba')];
@@ -1290,7 +1618,6 @@
     if (!v) return notFound('Não encontramos essa vaga.', 'profissional.html');
 
     var e = empresaDe(v.empresa), c = compat(v);
-    var eu = prof(PR().id);
 
     function paint() {
       var sp = loadP();
@@ -1300,7 +1627,7 @@
       var reputacao = e.novo
         ? '<div class="card"><div class="chips"><span class="chip blue">Empresa nova · reputação em construção</span></div>' +
           '<p class="row-sub">A reputação aparece depois da primeira contratação confirmada pelos dois lados.</p>' +
-          '<a href="perfil-empresa.html?id=' + q(e.id || v.empresa) + '" class="btn btn-outline">Ver perfil da empresa</a></div>'
+          '<a href="perfil-empresa.html?id=' + q(v.empresa) + '" class="btn btn-outline">Ver perfil da empresa</a></div>'
         : '<div class="card rep-light"><div class="rep-grid rep-grid-2">' + repEmpresaStats(e) + '</div>' +
           '<a href="perfil-empresa.html?id=' + q(v.empresa) + '" class="btn btn-outline">Ver perfil da empresa</a></div>';
 
@@ -1316,9 +1643,12 @@
             '<div><dt>Salário</dt><dd>' + esc(sal) + '</dd></div>' +
             '<div><dt>Posições</dt><dd>' + v.posicoes + '</dd></div>' +
             '<div><dt>Publicada em</dt><dd>' + dataBR(v.publicadaEm) + '</dd></div></dl>' +
-          (ja
-            ? '<a href="candidaturas.html" class="btn btn-outline">' + icon('check', 16, { stroke: 2.4 }) + 'Candidatura enviada · ver status</a>'
-            : '<button type="button" class="btn btn-primary" id="candidatar">Candidatar-se</button>') +
+          '<div class="btn-row">' +
+            (ja
+              ? '<a href="candidaturas.html" class="btn btn-outline">' + icon('check', 16, { stroke: 2.4 }) + 'Candidatura enviada · ver status</a>'
+              : '<button type="button" class="btn btn-primary" id="candidatar">Candidatar-se</button>') +
+            '<button type="button" class="btn btn-outline" id="duvida-btn">Tirar dúvida com a empresa</button>' +
+          '</div>' +
         '</section>' +
 
         '<section class="section"><h2>Compatibilidade</h2><div class="card">' +
@@ -1341,6 +1671,10 @@
 
       var b = $('#candidatar');
       if (b) b.addEventListener('click', resumo);
+      $('#duvida-btn').addEventListener('click', function () {
+        var conv = iniciarConversaProfissional(v.empresa, v.id, v.titulo);
+        window.location.href = 'conversa.html?id=' + q(conv.id) + '&como=profissional';
+      });
     }
 
     // Passo único de confirmação, com o resumo do que será enviado.
@@ -1381,7 +1715,7 @@
 
   /* ---------- Profissional: minhas candidaturas ---------- */
 
-  var GRUPO = { enviada: 'andamento', visualizada: 'andamento', analise: 'andamento', entrevista: 'andamento', contratado: 'contratado', nao: 'encerradas' };
+  var GRUPO = { enviada: 'andamento', visualizada: 'andamento', conversa: 'andamento', contratado: 'contratado', nao: 'encerradas', retirada: 'encerradas', encerrada: 'encerradas' };
   var GRUPOS = [
     { id: 'andamento', rotulo: 'Em andamento' },
     { id: 'contratado', rotulo: 'Contratado' },
@@ -1393,56 +1727,75 @@
   }
 
   // Candidaturas feitas na demonstração (mais recente primeiro) e as anteriores, já com o status atual.
+  // A candidatura da Recepcionista acompanha o que a empresa fez na jornada dela (mesma sessão).
   function candidaturasDe(sp) {
     var novas = Object.keys(sp.candidaturas).reverse().map(function (vid) {
       var v = vagaJob(vid);
       return { id: vid, vaga: vid, titulo: v.titulo, empresa: v.empresa, data: sp.candidaturas[vid].data, status: sp.candidaturas[vid].status };
     });
+    var s = load();
     var antigas = PR().candidaturas.map(function (c) {
       var r = {};
       Object.keys(c).forEach(function (k) { r[k] = c[k]; });
-      if (c.confirmar && sp.confirmacao === 'nao') { r.status = 'nao'; r.alcancou = 'entrevista'; }
+      if (c.vaga === 'recepcionista-exemplo') {
+        var vagaIdEmp = PR().confirmacao.vagaId;
+        var marcados = preench(s, vagaIdEmp);
+        if (marcados) { r.status = 'contratado'; r.combinado = combinadoDe(s, vagaIdEmp); }
+      }
       return r;
     });
     return novas.concat(antigas);
   }
 
   function timelineHtml(c) {
-    var ord = ['enviada', 'visualizada', 'analise', 'entrevista'];
+    var ord = ['enviada', 'visualizada', 'conversa'];
+    var saida = c.status === 'nao' || c.status === 'retirada' || c.status === 'encerrada';
     var ids, atual;
-    if (c.status === 'nao') { ids = ord.slice(0, ord.indexOf(c.alcancou) + 1).concat('nao'); atual = ids.length - 1; }
+    if (saida) { ids = ord.slice(0, ord.indexOf(c.alcancou) + 1).concat(c.status); atual = ids.length - 1; }
     else if (c.status === 'contratado') { ids = ord.concat('contratado'); atual = ids.length - 1; }
     else { ids = ord.concat('contratado'); atual = ord.indexOf(c.status); }
     var estado = { done: ' (concluída)', current: ' (etapa atual)', todo: ' (pendente)' };
     return '<ol class="timeline" style="--n:' + ids.length + '" aria-label="Andamento da candidatura">' + ids.map(function (id, i) {
       var st = i < atual ? 'done' : (i === atual ? 'current' : 'todo');
-      return '<li class="tl-' + st + (id === 'nao' ? ' tl-nao' : '') + '"' + (i === atual ? ' aria-current="step"' : '') + '>' +
+      return '<li class="tl-' + st + (saida && i === atual ? ' tl-nao' : '') + '"' + (i === atual ? ' aria-current="step"' : '') + '>' +
         '<span class="tl-dot" aria-hidden="true"></span>' +
         '<span class="tl-label">' + esc(etapaRotulo(id)) + '<span class="visually-hidden">' + estado[st] + '</span></span></li>';
     }).join('') + '</ol>';
   }
 
   function candidaturaCard(sp, c) {
-    var pendente = c.confirmar && !sp.confirmacao;
-    var chip, texto;
+    var texto, chip, acoesHtml = '';
     if (c.status === 'contratado') {
-      texto = pendente ? 'Contratado · aguardando sua confirmação' : 'Contratado · confirmado';
-      chip = pendente ? 'amber' : 'green';
+      if (c.confirmar) {
+        if (sp.confirmacao === 'confirmado') {
+          texto = 'Contratado · confirmado'; chip = 'green';
+          acoesHtml = '<p class="row-sub">Contratação confirmada. A avaliação da empresa fica disponível ao fim do vínculo.</p>';
+        } else if (sp.confirmacao === 'contestado') {
+          texto = 'Contratado · combinado contestado'; chip = 'amber';
+          acoesHtml = '<p class="row-sub">Você disse: “' + esc(sp.contestacaoTexto || '') + '”. A empresa foi avisada e vai revisar.</p>';
+        } else {
+          texto = 'Contratado · aguardando sua confirmação'; chip = 'amber';
+          acoesHtml = '<div class="combinado-slot" data-slot="' + esc(c.id) + '"></div>';
+        }
+      } else {
+        texto = 'Contratado · confirmado'; chip = 'green';
+        if (c.avaliar) {
+          acoesHtml = sp.avaliados[c.empresa]
+            ? '<p class="row-sub">Avaliação enviada · será publicada quando a empresa enviar a dela ou quando o prazo terminar.</p>'
+            : '<div class="btn-row"><a href="avaliar-empresa.html?id=' + q(c.empresa) + '" class="btn btn-primary">Avaliar empresa</a></div>';
+        }
+      }
+    } else if (c.status === 'conversa') {
+      texto = 'Em conversa'; chip = 'blue';
+      var ladoDono = c.empresa === 'empresa-exemplo' ? 'ambos' : 'profissional';
+      var convId = chatKey(ladoDono, PR_ID, c.empresa);
+      acoesHtml = '<div class="btn-row"><a href="conversa.html?id=' + q(convId) + '&como=profissional" class="btn btn-outline">Abrir conversa</a></div>';
+    } else if (c.status === 'enviada' || c.status === 'visualizada') {
+      texto = etapaRotulo(c.status); chip = 'blue';
+      if (c.data) acoesHtml = '<p class="row-sub">A empresa responde até ' + maisDias(c.data, 7) + '.</p>';
     } else {
       texto = etapaRotulo(c.status);
-      chip = c.status === 'nao' ? 'grey' : 'blue';
-    }
-
-    var acoes = '';
-    if (c.confirmar && c.status === 'contratado') {
-      acoes = pendente
-        ? '<div class="btn-row"><button type="button" class="btn btn-primary" data-conf="sim">Confirmar contratação</button>' +
-          '<button type="button" class="btn btn-outline" data-conf="nao">Não fui contratado</button></div>'
-        : '<p class="row-sub">Contratação confirmada. A avaliação da empresa fica disponível ao fim do vínculo.</p>';
-    } else if (c.avaliar) {
-      acoes = sp.avaliados[c.empresa]
-        ? '<p class="row-sub">Avaliação enviada · será publicada quando a empresa enviar a dela ou quando o prazo terminar.</p>'
-        : '<div class="btn-row"><a href="avaliar-empresa.html?id=' + q(c.empresa) + '" class="btn btn-primary">Avaliar empresa</a></div>';
+      chip = (c.status === 'nao' || c.status === 'retirada' || c.status === 'encerrada') ? 'grey' : 'blue';
     }
 
     var titulo = c.vaga && vagaJob(c.vaga)
@@ -1452,7 +1805,7 @@
       '<div class="head-row"><div class="row-main"><h3 class="row-title vaga-title">' + titulo + '</h3>' +
         '<div class="row-sub">' + empresaLink(c.empresa) + ' · enviada em ' + dataBR(c.data) + '</div></div>' +
         '<span class="chip ' + chip + '">' + esc(texto) + '</span></div>' +
-      timelineHtml(c) + acoes + '</article>';
+      timelineHtml(c) + acoesHtml + '</article>';
   }
 
   function renderCandidaturas() {
@@ -1486,6 +1839,12 @@
         : '<div class="empty"><p class="row-title">Nenhuma candidatura aqui.</p>' +
           '<p class="row-sub">Veja as vagas indicadas para você e candidate-se.</p>' +
           '<a href="profissional.html?aba=vagas" class="btn btn-primary">Ver vagas indicadas</a></div>';
+
+      $all('.combinado-slot').forEach(function (slot) {
+        var cid = slot.getAttribute('data-slot');
+        var candObj = lista.filter(function (x) { return x.id === cid; })[0];
+        if (candObj && candObj.combinado) paintCombinado(slot, candObj.combinado);
+      });
     }
 
     $('#cand-filter').addEventListener('click', function (e) {
@@ -1493,19 +1852,6 @@
       if (!b) return;
       filtro = b.getAttribute('data-grupo');
       paint();
-    });
-
-    $('#cand-list').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-conf]');
-      if (!b) return;
-      var ok = b.getAttribute('data-conf') === 'sim';
-      var sp = loadP();
-      sp.confirmacao = ok ? 'sim' : 'nao';
-      saveP(sp);
-      filtro = ok ? 'contratado' : 'encerradas';
-      paint();
-      say(ok ? 'Contratação confirmada.' : 'Resposta enviada. A candidatura foi encerrada.');
-      $('#cand-list').focus();
     });
 
     paint();
@@ -1604,7 +1950,8 @@
       cabecalho: '<div class="media center"><div class="avatar lg avatar-empresa">' + esc(e.iniciais) + '</div>' +
         '<div class="row-main"><div class="row-title" style="font-weight:800">' + esc(e.nome) + '</div>' +
         '<div class="row-sub">' + esc(e.setor) + ' · ' + esc(e.local) + '</div></div></div>',
-      perguntas: A.perguntas, respostas: A.respostas, limite: A.limiteComentario, cancelar: 'profissional.html'
+      perguntas: A.perguntas, respostas: A.respostas, limite: A.limiteComentario, cancelar: 'profissional.html',
+      combinado: PR().avaliacao.empresa === id ? PR().avaliacao.combinado : null
     };
 
     $('#content').innerHTML = avaliacaoFormHtml(cfg);
@@ -1613,6 +1960,166 @@
       st.avaliados[id] = r;
       saveP(st);
       enviada();
+    });
+  }
+
+  /* ---------- Mensagens (as duas jornadas) ---------- */
+
+  function renderMensagens() {
+    var como = params.get('como') === 'empresa' ? 'empresa' : 'profissional';
+    subTopbar('Mensagens', como === 'empresa' ? 'empresa.html' : 'profissional.html');
+    $('#nav').innerHTML = como === 'empresa' ? empresaNav('mensagens') : profNav('mensagens');
+
+    var chat = loadChat();
+    function ultima(cv) { return cv.mensagens.length ? cv.mensagens[cv.mensagens.length - 1].quando : '1970-01-01T00:00:00'; }
+
+    var lista = Object.keys(chat.conversas).map(function (id) { return chat.conversas[id]; })
+      .filter(function (cv) { return (cv.ladoDono === como || cv.ladoDono === 'ambos') && cv.mensagens.length > 0; })
+      .sort(function (a, b) { return new Date(ultima(b)) - new Date(ultima(a)); });
+
+    if (!lista.length) {
+      $('#content').innerHTML = '<div class="empty"><p class="row-title">Nenhuma conversa ainda.</p>' +
+        '<p class="row-sub">Inicie uma conversa a partir de um candidato, de uma vaga ou de um perfil.</p></div>';
+      return;
+    }
+
+    $('#content').innerHTML = '<div class="list chat-list">' + lista.map(function (cv) {
+      var outro = como === 'empresa' ? prof(cv.profissionalId) : empresaDe(cv.empresaId);
+      var msg = cv.mensagens[cv.mensagens.length - 1];
+      var naoLida = !cv.lidoPor[como];
+      var liberado = cv.compartilhou.empresa && cv.compartilhou.profissional;
+      var avatar = como === 'empresa'
+        ? '<span class="avatar" style="background:' + esc(outro.cor) + '">' + esc(outro.iniciais) + '</span>'
+        : '<span class="avatar avatar-empresa">' + esc(outro.iniciais) + '</span>';
+      return '<a class="chat-row' + (naoLida ? ' chat-unread' : '') + '" href="conversa.html?id=' + q(cv.id) + '&como=' + como + '">' + avatar +
+        '<span class="row-main"><span class="chat-row-top"><span class="row-title">' + esc(outro.nome) + '</span>' +
+          '<span class="chat-time">' + horaCurta(msg.quando) + '</span></span>' +
+          (cv.vagaTitulo ? '<span class="chat-vaga-lbl">' + esc(cv.vagaTitulo) + '</span>' : '') +
+          '<span class="row-sub chat-preview">' + esc((msg.de === como ? 'Você: ' : '') + msg.texto) + '</span>' +
+          (liberado ? '<span class="chip green chat-wa-badge">' + icon('check', 12, { stroke: 2.6 }) + 'WhatsApp liberado</span>' : '') + '</span>' +
+        (naoLida ? '<span class="chat-dot" aria-hidden="true"></span><span class="visually-hidden">, não lida</span>' : '') + '</a>';
+    }).join('') + '</div>';
+  }
+
+  /* ---------- Conversa ---------- */
+
+  function renderConversa() {
+    var como = params.get('como') === 'empresa' ? 'empresa' : 'profissional';
+    var id = params.get('id') || '';
+    var fallback = 'mensagens.html?como=' + como;
+
+    $('#nav').innerHTML = como === 'empresa' ? empresaNav('mensagens') : profNav('mensagens');
+
+    var chat = loadChat();
+    var cv = chat.conversas[id];
+    if (!cv) {
+      subTopbar('Conversa', fallback);
+      return notFound('Não encontramos essa conversa.', fallback);
+    }
+
+    var outro = como === 'empresa' ? prof(cv.profissionalId) : empresaDe(cv.empresaId);
+    subTopbar(outro.nome, fallback);
+    marcarLido(id, como);
+
+    function vagaLinkHtml() {
+      if (!cv.vagaTitulo) return '';
+      var href = como === 'empresa'
+        ? (cv.vagaEmpresaId ? 'candidatos.html?vaga=' + q(cv.vagaEmpresaId) : null)
+        : (cv.vagaProfId ? 'vaga.html?id=' + q(cv.vagaProfId) : null);
+      return '<div class="chat-vaga">' + icon('briefcase', 16, { stroke: 2 }) +
+        (href ? '<a href="' + esc(href) + '">' + esc(cv.vagaTitulo) + '</a>' : '<span>' + esc(cv.vagaTitulo) + '</span>') + '</div>';
+    }
+
+    function bubblesHtml() {
+      if (!cv.mensagens.length) return '<li class="bubble-sys">Nenhuma mensagem ainda. Escreva para começar a conversa.</li>';
+      return cv.mensagens.map(function (m) {
+        var meu = m.de === como;
+        return '<li class="bubble ' + (meu ? 'bubble-out' : 'bubble-in') + '"><span class="bubble-text">' + esc(m.texto) + '</span>' +
+          '<span class="bubble-time">' + horaCurta(m.quando) + '</span></li>';
+      }).join('');
+    }
+
+    function repintar() {
+      $('#wa-area').innerHTML = waBarHtml(cv, como);
+      $('#msgs').innerHTML = bubblesHtml();
+      $('#msgs').scrollTop = $('#msgs').scrollHeight;
+    }
+
+    $('#content').innerHTML =
+      vagaLinkHtml() +
+      '<div id="wa-area"></div>' +
+      '<ul class="bubbles" id="msgs" aria-live="polite"></ul>' +
+      '<form id="msg-form" class="chat-compose">' +
+        '<label class="visually-hidden" for="msg-in">Mensagem</label>' +
+        '<textarea id="msg-in" rows="1" maxlength="500" placeholder="Escreva uma mensagem…"></textarea>' +
+        '<button type="submit" class="btn btn-primary chat-send" aria-label="Enviar">' + icon('send', 18, { stroke: 2.2 }) + '</button>' +
+      '</form>' +
+      '<div class="visually-hidden" role="status" id="live"></div>';
+
+    repintar();
+
+    $('#wa-area').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-wa]');
+      if (!b) return;
+      var act = b.getAttribute('data-wa');
+      if (act === 'compartilhar') {
+        var c = loadChat(), cvv = c.conversas[id];
+        cvv.compartilhou[como] = true;
+        cvv.mensagens.push({ de: como, texto: 'Você compartilhou seu WhatsApp.', quando: new Date().toISOString() });
+        saveChat(c);
+        cv = cvv;
+        repintar();
+        say('WhatsApp compartilhado.');
+      } else if (act === 'contato') {
+        var existing = $('#wa-area').querySelector('.wa-preview');
+        if (existing) { existing.remove(); return; }
+        var euNome = como === 'empresa' ? empresaDe(cv.empresaId).nome : prof(cv.profissionalId).nome;
+        var msgTexto = 'Olá! Aqui é ' + euNome + ', pelo KORbuild Match' + (cv.vagaTitulo ? ', sobre a vaga de ' + cv.vagaTitulo : '') + '.';
+        var canal = canalDoOutro(cv, como);
+        var meio = canal === 'sms' ? 'por SMS' : (canal === 'email' ? 'por e-mail' : 'pelo WhatsApp');
+        $('#wa-area').insertAdjacentHTML('beforeend',
+          '<div class="wa-preview"><p class="wa-preview-lbl">Isto contataria ' + esc(outro.nome) + ' ' + meio + ' com esta mensagem (simulação):</p>' +
+          '<blockquote>' + esc(msgTexto) + '</blockquote>' +
+          '<p class="wa-preview-note">Os contatos deste protótipo são fictícios; nada é enviado de verdade.</p>' +
+          '<button type="button" class="btn btn-outline" data-wa="fechar">Fechar</button></div>');
+      } else if (act === 'fechar') {
+        var p = $('#wa-area').querySelector('.wa-preview');
+        if (p) p.remove();
+      }
+    });
+
+    $('#msg-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = $('#msg-in');
+      var texto = input.value.trim();
+      if (!texto) return;
+      var c = loadChat();
+      var cvv = c.conversas[id];
+      cvv.mensagens.push({ de: como, texto: texto, quando: new Date().toISOString() });
+      cvv.lidoPor[como] = true;
+      cvv.lidoPor[como === 'empresa' ? 'profissional' : 'empresa'] = false;
+      saveChat(c);
+      cv = cvv;
+      input.value = '';
+      repintar();
+      say('Mensagem enviada.');
+
+      if (cv.ladoDono !== 'ambos' && !cv.respondeuAuto) {
+        var auto = respostaAutomatica(cv);
+        if (auto) {
+          setTimeout(function () {
+            var c2 = loadChat(), cvv2 = c2.conversas[id];
+            if (!cvv2) return;
+            cvv2.mensagens.push({ de: auto.de, texto: auto.texto, quando: new Date().toISOString() });
+            cvv2.respondeuAuto = true;
+            cvv2.lidoPor.empresa = true;
+            cvv2.lidoPor.profissional = true;
+            saveChat(c2);
+            cv = cvv2;
+            repintar();
+          }, 500);
+        }
+      }
     });
   }
 
@@ -1631,7 +2138,9 @@
     vaga: renderVaga,
     candidaturas: renderCandidaturas,
     'perfil-empresa': renderPerfilEmpresa,
-    'avaliar-empresa': renderAvaliarEmpresa
+    'avaliar-empresa': renderAvaliarEmpresa,
+    mensagens: renderMensagens,
+    conversa: renderConversa
   };
   if (PAGES[page]) PAGES[page]();
 })();

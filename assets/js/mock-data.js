@@ -14,6 +14,11 @@
     return { pagamento: pagamento, anuncio: anuncio, condicoes: condicoes, ambiente: ambiente, novamente: novamente };
   }
 
+  // O combinado de uma contratação: referência usada em "Registrar o combinado" e nas avaliações.
+  function combinado(funcao, tipoContratacao, moeda, periodo, valor, dataInicio, jornada) {
+    return { funcao: funcao, tipoContratacao: tipoContratacao, moeda: moeda, periodo: periodo, valor: valor, dataInicio: dataInicio, jornada: jornada };
+  }
+
   // Reputação da Empresa Exemplo: a mesma na jornada da empresa e na do profissional.
   var REP_EXEMPLO = { nota: '4,7', contratacoes: 23, pagouConforme: '96%' };
 
@@ -54,39 +59,39 @@
       // Etapas do funil de candidatos. "manual: false" não aparece no seletor de status.
       statusCandidato: [
         { id: 'novo', rotulo: 'Novos', singular: 'Novo' },
-        { id: 'analise', rotulo: 'Em análise', singular: 'Em análise' },
-        { id: 'entrevista', rotulo: 'Entrevista', singular: 'Entrevista' },
+        { id: 'conversa', rotulo: 'Em conversa', singular: 'Em conversa' },
         { id: 'nao', rotulo: 'Não selecionados', singular: 'Não selecionado' },
         { id: 'contratado', rotulo: 'Contratados', singular: 'Contratado', manual: false }
       ],
 
       // Quem se candidatou a cada vaga. "atende" = quantos requisitos da vaga a pessoa atende.
+      // "data" = quando se candidatou; usada para o prazo de 7 dias ("Responder até").
       candidatos: {
         recepcionista: [
-          { id: 'joao-silva', atende: 5, status: 'entrevista' },
-          { id: 'rafael-lima', atende: 4, status: 'entrevista' },
-          { id: 'fernanda-costa', atende: 4, status: 'analise' },
-          { id: 'juliana-alves', atende: 5, status: 'novo' },
-          { id: 'diego-martins', atende: 4, status: 'novo' },
-          { id: 'thiago-pereira', atende: 3, status: 'nao' }
+          { id: 'joao-silva', atende: 5, status: 'visualizada', data: '2026-09-23' },
+          { id: 'rafael-lima', atende: 4, status: 'conversa', data: '2026-09-21' },
+          { id: 'fernanda-costa', atende: 4, status: 'conversa', data: '2026-09-22' },
+          { id: 'juliana-alves', atende: 5, status: 'novo', data: '2026-09-26' },
+          { id: 'diego-martins', atende: 4, status: 'novo', data: '2026-09-27' },
+          { id: 'thiago-pereira', atende: 3, status: 'nao', data: '2026-09-10' }
         ],
         atendente: [
-          { id: 'mariana-rocha', atende: 5, status: 'entrevista' },
-          { id: 'paulo-andrade', atende: 4, status: 'analise' },
-          { id: 'lucas-teixeira', atende: 4, status: 'novo' },
-          { id: 'thiago-pereira', atende: 5, status: 'novo' },
-          { id: 'juliana-alves', atende: 5, status: 'novo' },
-          { id: 'diego-martins', atende: 3, status: 'novo' },
-          { id: 'fernanda-costa', atende: 3, status: 'nao' }
+          { id: 'mariana-rocha', atende: 5, status: 'conversa', data: '2026-09-15' },
+          { id: 'paulo-andrade', atende: 4, status: 'conversa', data: '2026-09-18' },
+          { id: 'lucas-teixeira', atende: 4, status: 'novo', data: '2026-09-25' },
+          { id: 'thiago-pereira', atende: 5, status: 'novo', data: '2026-09-26' },
+          { id: 'juliana-alves', atende: 5, status: 'novo', data: '2026-09-27' },
+          { id: 'diego-martins', atende: 3, status: 'novo', data: '2026-09-24' },
+          { id: 'fernanda-costa', atende: 3, status: 'nao', data: '2026-09-05' }
         ],
         auxiliar: [
-          { id: 'fernanda-costa', atende: 5, status: 'analise' },
-          { id: 'diego-martins', atende: 5, status: 'novo' },
-          { id: 'paulo-andrade', atende: 3, status: 'nao' }
+          { id: 'fernanda-costa', atende: 5, status: 'conversa', data: '2026-09-12' },
+          { id: 'diego-martins', atende: 5, status: 'novo', data: '2026-09-24' },
+          { id: 'paulo-andrade', atende: 3, status: 'nao', data: '2026-08-01' }
         ],
         vendedora: [
-          { id: 'ana-souza', atende: 5, status: 'contratado' },
-          { id: 'carla-mendes', atende: 4, status: 'nao' }
+          { id: 'ana-souza', atende: 5, status: 'contratado', data: '2026-06-01' },
+          { id: 'carla-mendes', atende: 4, status: 'nao', data: '2026-05-20' }
         ]
       },
 
@@ -111,19 +116,19 @@
         { id: 'lucas-teixeira', atende: 4 }
       ],
 
-      // Avaliação cega do profissional
+      // Avaliação cega do profissional. "ref" liga a pergunta a um campo do combinado, mostrado como referência.
       avaliacao: {
         prazoPadrao: 7,
         limiteComentario: 300,
         respostas: ['Sim', 'Não', 'Parcialmente'],
         perguntas: [
-          { id: 'entregou', texto: 'Entregou o trabalho combinado?' },
-          { id: 'horarios', texto: 'Cumpriu horários e prazos?' },
+          { id: 'entregou', texto: 'Entregou o trabalho combinado?', ref: 'funcao' },
+          { id: 'horarios', texto: 'Cumpriu horários e prazos?', ref: 'jornada' },
           { id: 'comunicacao', texto: 'Comunicação clara e profissional?' },
           { id: 'novamente', texto: 'Contrataria novamente?' }
         ],
         pendentes: {
-          'ana-souza': { vaga: 'Vendedora', prazoDias: 5 }
+          'ana-souza': { vaga: 'Vendedora', prazoDias: 5, combinado: combinado('Vendedora', 'Tempo integral', 'BRL', 'mes', 1800, '2026-06-01', 'Seg a sáb, 9h às 18h') }
         }
       },
 
@@ -156,6 +161,7 @@
     },
 
     // Perfis dos profissionais (candidatos e indicados). A chave é o id usado nos links.
+    // "canal" é o meio de contato preferido, usado quando o WhatsApp é liberado no chat (padrão: whatsapp).
     profissionais: {
       'mariana-rocha': {
         nome: 'Mariana Rocha', iniciais: 'MR', cor: '#DCE6F7',
@@ -244,7 +250,7 @@
         nome: 'Rafael Lima', iniciais: 'RL', cor: '#DCE6F7',
         resumo: 'Atendente de loja · 5 anos',
         local: 'Osasco, SP · Brasil', disponibilidade: 'Disponível em 30 dias',
-        nota: '4,6', trabalhos: 11, contrataria: '90%', verificado: true,
+        nota: '4,6', trabalhos: 11, contrataria: '90%', verificado: true, canal: 'sms',
         experienciaVerificada: [
           { cargo: 'Atendente de loja', empresa: 'Grupo Horizonte', periodo: '2024 – 2025' },
           { cargo: 'Atendente', empresa: 'Papelaria Central', periodo: '2022 – 2024' }
@@ -527,6 +533,36 @@
       }
     },
 
+    // Liga o id da vaga no catálogo da empresa (candidatos.html) ao id correspondente no
+    // catálogo do profissional (vaga.html), quando a mesma vaga aparece nos dois lados.
+    vagaLink: { recepcionista: 'recepcionista-exemplo', atendente: 'atendente-exemplo' },
+
+    // Conversas que já existem quando a demonstração começa (o resto nasce das ações na tela).
+    // "ladoDono" diz quem pode interagir nesta demonstração: 'empresa', 'profissional' ou 'ambos'
+    // (só a Empresa Exemplo e o João Silva têm os dois lados navegáveis no protótipo).
+    conversasIniciais: {
+      'rafael-lima': {
+        ladoDono: 'empresa', profissionalId: 'rafael-lima', empresaId: 'empresa-exemplo',
+        vagaTitulo: 'Atendente de loja', vagaEmpresaId: 'atendente', vagaProfId: 'atendente-exemplo',
+        mensagens: [
+          { de: 'empresa', texto: 'Oi, Rafael! Vimos seu perfil para a vaga de Atendente de loja. Você ainda está disponível?', quando: '2026-09-26T14:10:00' },
+          { de: 'profissional', texto: 'Oi! Sim, ainda estou. Posso começar em até 30 dias.', quando: '2026-09-26T14:40:00' }
+        ],
+        compartilhou: { empresa: false, profissional: true },
+        lidoPor: { empresa: false, profissional: true }
+      },
+      'hotel-vista-mar': {
+        ladoDono: 'profissional', profissionalId: 'joao-silva', empresaId: 'hotel-vista-mar',
+        vagaTitulo: 'Recepcionista de plantão', vagaEmpresaId: null, vagaProfId: null,
+        mensagens: [
+          { de: 'profissional', texto: 'Olá! Fiquei com uma dúvida sobre a escala de plantão, pode me explicar melhor?', quando: '2026-09-15T10:00:00' },
+          { de: 'empresa', texto: 'Oi, João! A escala é 12x36, com início às 7h. Faz sentido para você?', quando: '2026-09-15T11:20:00' }
+        ],
+        compartilhou: { empresa: false, profissional: false },
+        lidoPor: { empresa: true, profissional: true }
+      }
+    },
+
     // O profissional logado é o João Silva (perfil em "profissionais").
     profissional: {
       id: 'joao-silva',
@@ -534,45 +570,49 @@
       iniciais: 'JS',
       reputacao: { nota: '4,8', trabalhos: 6, contratariamDeNovo: '100%' },
 
-      // Contratação a confirmar: a mesma que a Empresa Exemplo marca na jornada da empresa.
+      // Contratação em andamento: a mesma vaga que a Empresa Exemplo administra na jornada dela.
+      // O status real (visualizada/em conversa/contratado) é calculado a partir do que aconteceu na sessão.
       confirmacao: { empresa: 'empresa-exemplo', vaga: 'Recepcionista', vagaId: 'recepcionista' },
 
       // Avaliação cega pendente (vínculo anterior)
-      avaliacao: { empresa: 'loja-central', prazoDias: 3 },
+      avaliacao: { empresa: 'loja-central', prazoDias: 3, combinado: combinado('Atendente', 'Tempo integral', 'BRL', 'mes', 1900, '2025-01-15', 'Seg a sex, 8h às 17h') },
 
       vagasIndicadas: ['atendente-loja', 'assistente-adm', 'suporte-cliente'],
 
-      // Candidaturas anteriores. "confirmar": depende da confirmação de contratação;
+      // Candidaturas anteriores. "confirmar": a candidatura acompanha a contratação em andamento (Recepcionista);
       // "avaliar": contratado e confirmado, com avaliação da empresa pendente.
       candidaturas: [
-        { id: 'recepcionista-exemplo', vaga: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo', data: '2026-09-02', status: 'contratado', confirmar: true },
-        { id: 'atendente-hotel', vaga: null, titulo: 'Recepcionista de plantão', empresa: 'hotel-vista-mar', data: '2026-09-15', status: 'entrevista' },
-        { id: 'atendente-cafe', vaga: null, titulo: 'Atendente de balcão', empresa: 'cafe-aurora', data: '2026-08-20', status: 'nao', alcancou: 'analise' },
+        { id: 'recepcionista-exemplo', vaga: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo', data: '2026-09-02', status: 'visualizada', confirmar: true },
+        { id: 'atendente-hotel', vaga: null, titulo: 'Recepcionista de plantão', empresa: 'hotel-vista-mar', data: '2026-09-15', status: 'conversa' },
+        { id: 'atendente-cafe', vaga: null, titulo: 'Atendente de balcão', empresa: 'cafe-aurora', data: '2026-08-20', status: 'nao', alcancou: 'conversa' },
+        { id: 'suporte-retirada', vaga: null, titulo: 'Atendente de suporte', empresa: 'nova-rota', data: '2026-09-05', status: 'retirada', alcancou: 'enviada' },
+        { id: 'vendas-encerrada', vaga: null, titulo: 'Vendedora', empresa: 'loja-central', data: '2026-07-10', status: 'encerrada', alcancou: 'conversa' },
         { id: 'atendente-loja-anterior', vaga: null, titulo: 'Atendente', empresa: 'loja-central', data: '2025-01-12', status: 'contratado', avaliar: true }
       ],
 
-      // Avaliação de empresa (cega)
+      // Avaliação de empresa (cega). "ref" liga a pergunta a um campo do combinado, mostrado como referência.
       avaliacaoEmpresa: {
         prazoPadrao: 7,
         limiteComentario: 300,
         respostas: ['Sim', 'Não', 'Parcialmente'],
         perguntas: [
-          { id: 'pagamento', texto: 'O pagamento foi feito conforme combinado?' },
+          { id: 'pagamento', texto: 'O pagamento foi feito conforme combinado?', ref: 'salario' },
           { id: 'anuncio', texto: 'A vaga correspondia ao anúncio?' },
-          { id: 'condicoes', texto: 'Condições e prazos foram cumpridos?' },
+          { id: 'condicoes', texto: 'Condições e prazos foram cumpridos?', ref: 'condicoes' },
           { id: 'ambiente', texto: 'O ambiente de trabalho foi respeitoso?' },
           { id: 'novamente', texto: 'Trabalharia novamente para esta empresa?' }
         ]
       },
 
-      // Etapas do processo seletivo
+      // Etapas do processo seletivo. As três últimas são saídas (o candidato não segue depois delas).
       etapas: [
         { id: 'enviada', rotulo: 'Enviada' },
         { id: 'visualizada', rotulo: 'Visualizada' },
-        { id: 'analise', rotulo: 'Em análise' },
-        { id: 'entrevista', rotulo: 'Entrevista' },
+        { id: 'conversa', rotulo: 'Em conversa' },
         { id: 'contratado', rotulo: 'Contratado' },
-        { id: 'nao', rotulo: 'Não selecionado' }
+        { id: 'nao', rotulo: 'Não selecionado' },
+        { id: 'retirada', rotulo: 'Retirada' },
+        { id: 'encerrada', rotulo: 'Vaga encerrada' }
       ]
     }
   };

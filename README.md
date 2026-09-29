@@ -18,12 +18,14 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `candidaturas.html` | Profissional: minhas candidaturas, com linha do tempo |
 | `perfil-empresa.html?id=ID` | Profissional: perfil da empresa (reputação, vagas, avaliações) |
 | `avaliar-empresa.html?id=ID` | Profissional: avaliação cega da empresa |
+| `mensagens.html?como=empresa\|profissional` | As duas jornadas: lista de conversas |
+| `conversa.html?id=ID&como=empresa\|profissional` | As duas jornadas: chat de uma conversa |
 
 Interações simuladas:
 
 - No login, a escolha "Profissional" ou "Empresa" leva à tela correspondente.
 - Na tela da empresa, os profissionais indicados mudam conforme a vaga escolhida.
-- Na tela do profissional, "Confirmar" e "Não fui contratado" simulam a confirmação de contratação.
+- Na tela do profissional, o card de confirmação usa "Confirmar" e "Algo está diferente" (contestação).
 - Tocar no avatar volta para o login.
 - Botões de telas que ainda não existem mostram um aviso.
 
@@ -31,7 +33,7 @@ Jornada da empresa (simulada, sem back-end):
 
 - **Continuidade entre telas:** o que a pessoa faz fica em `sessionStorage` (vaga publicada, candidato movido de status, vaga marcada como preenchida, avaliação enviada). Fechar a aba ou entrar de novo pelo login recomeça a demonstração.
 - **Vaga publicada** aparece em "Minhas vagas" (início da empresa) e ganha profissionais indicados.
-- **Vaga marcada como preenchida** passa a "Preenchida · aguardando confirmação".
+- **Vaga marcada como preenchida** passa por uma segunda etapa, "Registrar o combinado" (salário, data de início, jornada, função e tipo de contratação), antes de virar "Preenchida · aguardando confirmação".
 - **Formulário de vaga** não tem campos de idade, gênero, raça, religião, estado civil, nacionalidade nem foto (proibidos por lei em muitos países).
 - Os números "candidatos novos" e "candidatos" da tela inicial vêm da lista de candidatos em `mock-data.js`.
 
@@ -39,8 +41,16 @@ Jornada do profissional (simulada, sem back-end; o profissional logado é o Joã
 
 - **Continuidade entre telas:** fica em `sessionStorage`, à parte do estado da empresa (candidatura enviada, confirmação de contratação, avaliação enviada, empresa seguida). O login zera as duas jornadas.
 - **Candidatar-se** é um passo único: mostra o resumo do que será enviado (perfil já preenchido) antes de confirmar. Depois, a vaga já aparece em Minhas candidaturas e o botão na tela da vaga vira "Candidatura enviada · ver status".
-- **Consistência entre as duas jornadas:** a contratação que o João confirma aqui é a mesma que a Empresa Exemplo marca como preenchida na jornada da empresa (a vaga de Recepcionista). Confirmar de um lado atualiza o que o outro lado vê — por exemplo, `candidatos.html?vaga=recepcionista` já mostra João Silva como contratado depois que ele confirma pela tela do profissional, mesmo sem passar por `preencher-vaga.html`.
+- **Consistência entre as duas jornadas:** a contratação que o João confirma aqui é a mesma que a Empresa Exemplo administra na jornada dela (a vaga de Recepcionista). O que uma tela faz aparece na outra — por exemplo, `candidatos.html?vaga=recepcionista` já mostra João Silva como contratado assim que ele confirma o combinado pela tela do profissional.
 - A reputação da Empresa Exemplo e da Loja Central usa os mesmos números nas duas jornadas (definidos uma vez em `mock-data.js`).
+
+Candidatura e conversa (as duas jornadas):
+
+- **Linha do tempo da candidatura:** Enviada → Visualizada → Em conversa → Contratado, com três saídas possíveis: Não selecionado, Retirada ou Vaga encerrada.
+- **Prazo de 7 dias:** um candidato novo mostra "Responder até dd/mm" para a empresa; uma candidatura ainda não respondida mostra "A empresa responde até dd/mm" para o profissional.
+- **Conversas** ficam em `sessionStorage` à parte (`kor.chat`), visível nas duas jornadas porque é a mesma aba do navegador. Iniciar uma conversa move a candidatura para "Em conversa". Só a Empresa Exemplo e o João Silva têm os dois lados navegáveis no protótipo; conversas com as demais pessoas e empresas recebem uma resposta automática simulada.
+- **WhatsApp/SMS/e-mail:** a barra no topo do chat libera o contato só quando os dois lados compartilharem. O botão final usa o canal preferido da outra pessoa (Rafael Lima está configurado com SMS, para mostrar essa variação) e mostra a mensagem que seria enviada, sem abrir nada de verdade.
+- **Combinado registrado:** o salário e as condições ficam disponíveis como referência nas perguntas de avaliação sobre pagamento e condições, por exemplo "O pagamento foi feito conforme combinado (R$ 1.800,00 por mês)?".
 
 ## Como alterar os dados
 
@@ -55,6 +65,7 @@ profissional.html
 publicar-vaga.html, candidatos.html, perfil-profissional.html,
 preencher-vaga.html, avaliar-profissional.html
 vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
+mensagens.html, conversa.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
