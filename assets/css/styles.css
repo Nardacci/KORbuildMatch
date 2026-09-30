@@ -1397,3 +1397,21 @@ body[data-page="login"] .app {
 .login-foot { color: var(--on-dark); }
 .login-foot a { color: var(--lime); }
 .segmented button[aria-pressed="true"] { color: var(--ink); }
+
+/* ---------- Minha empresa: plano e uso ---------- */
+
+.plan-card { background: var(--ink); color: #FFFFFF; }
+.plan-card .row-sub { color: var(--on-dark); }
+.plan-card .btn-outline { background: rgba(255, 255, 255, 0.1); color: #FFFFFF; }
+.plan-card :focus-visible { outline-color: var(--lime); }
+.chip.lime { background: var(--lime); color: var(--ink); }
+.usage-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: -6px; }
+.usage-row span { color: var(--on-dark); }
+.usage { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.usage span { display: block; height: 100%; border-radius: 4px; background: var(--lime); }
+.plain-list li { display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Meu perfil: privacidade ---------- */
+
+.priv-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: center; gap: 8px; }
+.priv-row span { font-size: 14px; font-weight: 600; color: var(--ink); }

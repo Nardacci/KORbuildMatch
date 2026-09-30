@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (49 passos, ~212 verificações).
+  KORbuild Match — testes automatizados (54 passos, ~245 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -634,6 +634,94 @@ var steps = [
     set('#f-pais', ''); $('input[name="f-modelo"][value="remoto"]').click();
     L(txt('#busca-count') === '7 profissionais encontrados', 'busca prof: aceita remoto: ' + txt('#busca-count'));
     L(!hasHScroll(), 'busca prof: sem rolagem horizontal');
+  },
+
+  /* ===== BLOCO F — Abas que faltavam: Minhas vagas, Minha empresa e Meu perfil ===== */
+
+  // F1: Minhas vagas: estados e ações (pausar, cancelar com aviso, reabrir)
+  async function () {
+    await fresh(); await go('empresa.html');
+    L(/vagas\.html$/.test($$('#nav a').filter(function (a) { return /Vagas/.test(a.textContent); })[0].getAttribute('href')) &&
+      /minha-empresa\.html$/.test($$('#nav a').filter(function (a) { return /Empresa/.test(a.textContent); })[0].getAttribute('href')), 'nav empresa: abas Vagas e Empresa agora abrem telas');
+    await go('vagas.html');
+    var f = function () { return $$('#vagas-filter button').map(function (b) { return b.textContent; }).join('|'); };
+    L(f() === 'Abertas · 2|Pausadas · 1|Rascunhos · 0|Encerradas · 2', 'vagas: grupos por estado: ' + f());
+    $('[data-acao="pausar"][data-id="atendente"]').click();
+    L(/Pausadas · 2/.test(f()), 'vagas: pausar move para Pausadas');
+    $('[data-acao="cancelar"][data-id="recepcionista"]').click();
+    L(/5 candidatos em aberto recebem o aviso/.test(txt('#cancelar-box')), 'vagas: cancelar pede confirmação e diz quem será avisado: ' + txt('#cancelar-box'));
+    $('[data-acao="confirmar-cancelar"]').click();
+    L(/Encerradas · 3/.test(f()), 'vagas: cancelada vai para Encerradas');
+    $('[data-grupo="encerradas"]').click();
+    L(/Cancelada/.test(txt('#vagas-list')) && /Expirada/.test(txt('#vagas-list')) && /Preenchida/.test(txt('#vagas-list')), 'vagas: encerradas mostra Preenchida, Cancelada e Expirada');
+    $('[data-acao="reabrir"][data-id="recepcionista"]').click();
+    L(/Abertas · 1/.test(f()), 'vagas: reabrir volta para Abertas: ' + f());
+    L(!hasHScroll(), 'vagas: sem rolagem horizontal');
+    L(btnH().length === 0, 'vagas: botoes 40px ' + JSON.stringify(btnH()));
+  },
+  // F2: editar uma vaga do mock (formulário já preenchido) e ver a mudança nas outras telas
+  async function () {
+    await go('publicar-vaga.html?editar=recepcionista');
+    L(txt('.topbar-title') === 'Editar vaga' && $('#titulo').value === 'Recepcionista' && $('#cidade').value === 'São Paulo' && $('#sal-min').value === '2000', 'editar: formulário preenchido com a vaga');
+    L(/Qual seu nível de inglês/.test($('#triagem-0-texto').value), 'editar: pergunta de triagem existente carregada');
+    set('#titulo', 'Recepcionista bilíngue');
+    submit('#vaga-form');
+    L(txt('#done-title') === 'Vaga atualizada', 'editar: salvo');
+    await go('candidatos.html?vaga=recepcionista');
+    L(/Recepcionista bilíngue/.test(txt('#vaga-head')), 'editar: novo título aparece em Candidatos');
+  },
+  // F3: rascunho: salva só com o título, depois publica
+  async function () {
+    await go('publicar-vaga.html');
+    set('#titulo', 'Garçom');
+    $('#salvar-rascunho').click();
+    L(txt('#done-title') === 'Rascunho salvo', 'rascunho: salvo só com o título');
+    await go('vagas.html?grupo=rascunhos');
+    L(/Garçom/.test(txt('#vagas-list')), 'rascunho: aparece em Rascunhos');
+    await clickNav(linkByText('Continuar editando'));
+    submit('#vaga-form');
+    L(!$('#descricao-err').hidden, 'rascunho: publicar exige os campos obrigatórios');
+    set('#descricao', 'Atendimento às mesas no almoço e jantar do restaurante.');
+    pick('modelo', 'presencial'); set('#pais', 'Brasil'); set('#cidade', 'São Paulo'); set('#tipo', 'Meio período');
+    submit('#vaga-form');
+    L(txt('#done-title') === 'Vaga publicada', 'rascunho: publicado');
+    await go('vagas.html?grupo=abertas');
+    L(/Garçom/.test(txt('#vagas-list')), 'rascunho: agora em Abertas');
+  },
+  // F4: Minha empresa: plano, edição de dados e o que o profissional vê
+  async function () {
+    await fresh(); await go('minha-empresa.html');
+    L(/Plano Essencial/.test(txt('.plan-card')) && /de 3/.test(txt('.plan-card')) && /de 30/.test(txt('.plan-card')) && /cartão só é pedido/.test(txt('.plan-card')), 'minha empresa: plano, período grátis e uso: ' + txt('.plan-card'));
+    L(/Bruno Tavares/.test(txt('.content')), 'minha empresa: histórico de vagas preenchidas com o nome (só aqui)');
+    $('#editar-empresa').click();
+    set('#emp-desc', 'Rede de conveniência com atendimento 24 horas.');
+    var i = $$('#localizacoes-in option').filter(function (o) { return /Curitiba/.test(o.textContent); })[0].value;
+    set('#localizacoes-in', i); $('#localizacoes-add').click();
+    submit('#empresa-form');
+    L(/Rede de conveniência com atendimento 24 horas/.test(txt('.content')) && /Curitiba/.test(txt('.content')), 'minha empresa: dados salvos');
+    await go('perfil-empresa.html?id=empresa-exemplo');
+    L(/Rede de conveniência com atendimento 24 horas/.test(txt('.content')) && /Curitiba, PR/.test(txt('.content')), 'perfil empresa (profissional): vê os dados novos');
+    L(/Responde em até 7 dias/.test(txt('.content')) && /Preenchida em/.test(txt('.content')) && !/Bruno Tavares/.test(txt('.content')), 'perfil empresa (profissional): taxa de resposta e vagas preenchidas, sem o nome de quem foi contratado');
+    L(!hasHScroll(), 'minha empresa: sem rolagem horizontal');
+  },
+  // F5: Meu perfil (profissional): ver, editar e privacidade respeitada na visão da empresa
+  async function () {
+    await fresh();
+    L(/perfil\.html$/.test($$('#nav a').filter(function (a) { return /Perfil/.test(a.textContent); })[0].getAttribute('href')), 'nav profissional: aba Perfil abre a tela');
+    await go('perfil.html');
+    L(/Trabalho que procuro/.test(txt('.content')) && /Certificações e licenças/.test(txt('.content')) && /Privacidade/.test(txt('.content')), 'meu perfil: seções principais');
+    $('#editar-perfil').click();
+    set('#pf-apres', 'Recepcionista com foco em bom atendimento.');
+    set('#vis-declarada', 'privado');
+    set('#pf-dist', '60');
+    submit('#perfil-form');
+    L(/Recepcionista com foco em bom atendimento/.test(txt('.content')) && /Experiência declaradaPrivado/.test(txt('#priv-resumo')), 'meu perfil: salvo com a privacidade: ' + txt('#priv-resumo'));
+    await go('perfil-profissional.html?id=joao-silva&vaga=recepcionista');
+    L(/Recepcionista com foco em bom atendimento/.test(txt('.content')), 'visão da empresa: apresentação nova');
+    L(/deixou esta parte privada/.test(txt('.content')) && !/Contabilidade Souza/.test(txt('.content')), 'visão da empresa: experiência declarada escondida');
+    await go('profissional.html?aba=vagas');
+    L(txt('#acc-vagas-sum') === '4 vagas indicadas', 'meu perfil: distância máxima de 60 km vale nas indicações: ' + txt('#acc-vagas-sum'));
+    L(!hasHScroll(), 'meu perfil: sem rolagem horizontal');
   }
 ];
 (async function () {
