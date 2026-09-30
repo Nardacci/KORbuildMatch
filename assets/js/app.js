@@ -2600,8 +2600,8 @@
 
       var opcionaisBody =
         '<section class="card"><h2 class="card-title">Mensagem para a empresa</h2>' +
-          field('mensagem-candidato', 'Mensagem', 'textarea', 'rows="3" maxlength="400"', '',
-            { hint: 'Conte brevemente por que você é uma boa escolha.' }) +
+          field('mensagem-candidato', 'Mensagem', 'textarea', 'rows="3" maxlength="300"', '',
+            { hint: 'Conte brevemente por que você é uma boa escolha. Até 300 caracteres.' }) +
         '</section>' +
 
         '<section class="card"><h2 class="card-title">Pretensão salarial</h2>' +
