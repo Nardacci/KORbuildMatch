@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (49 passos, ~215 verificações).
+  KORbuild Match — testes automatizados (49 passos, ~212 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -545,6 +545,8 @@ var steps = [
     L(!hasHScroll(), 'indicados: sem rolagem horizontal');
     L(btnH().length === 0, 'indicados: botoes 40px ' + JSON.stringify(btnH()));
     L(!!$('#busca-empresa') && $('#busca-empresa').getAttribute('href') === 'buscar.html?como=empresa' && /Buscar profissionais/.test(txt('#busca-empresa')), 'home empresa: campo de busca no topo, igual ao do profissional');
+    L(/4,7/.test(txt('.hero-score')) && /Reputação verificada/.test(txt('.hero-score')) && $$('.hero-stat').length === 3, 'home empresa: topo com a reputação em destaque e 3 números: ' + txt('.hero-c'));
+    L(!!$('#ind-list .match[aria-label="Atende 5 de 5 requisitos"]'), 'indicados: anel de compatibilidade com texto para leitor de tela');
   },
   // E2: ampliar o raio traz a Renata; o raio ampliado continua valendo ao voltar à tela
   async function () {
@@ -599,6 +601,7 @@ var steps = [
     L(/≈ 10 km de você/.test(txt('#vagas-ind')) && /De qualquer lugar · equipe em UTC−3/.test(txt('#vagas-ind')), 'prof: distância aproximada e fuso da vaga remota');
     set('#dist-max', '60');
     L(txt('#acc-vagas-sum') === '4 vagas indicadas' && /Recepcionista de hotel/.test(txt('#vagas-ind')), 'prof: com 60 km, a vaga de Santos aparece');
+    L(txt('#stat-vagas') === '4', 'prof: número "vagas perto de você" do topo acompanha a distância: ' + txt('#stat-vagas'));
     await go('vaga.html?id=front-desk-miami');
     L(/Miami, FL · Estados Unidos/.test(txt('.summary')), 'vaga: local com país quando é outro: ' + txt('.summary'));
     L(/25 milhas/.test(txt('#vaga-alcance')), 'vaga: aviso de fora do raio (em milhas): ' + txt('#vaga-alcance'));

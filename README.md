@@ -74,9 +74,16 @@ Localização (documento v0.2, seções 6, 7, 10 e 10.1):
 - **Busca (seções 10 e 10.1):** a localização é um filtro opcional, desligado por padrão e controlado por quem pesquisa: distância (a partir da sede da empresa ou da região do profissional), país, estado, cidade, modelo de trabalho, disposto a se mudar (só na busca da empresa) e fuso horário. Na busca de vagas, as remotas aparecem com qualquer distância.
 - **Cidades conhecidas:** `mock-data.js` traz uma lista de cidades com o ponto aproximado (em `localizacao.cidades`). Ao publicar uma vaga numa cidade fora da lista, ela é publicada normalmente, mas as indicações não são filtradas por distância (a tela avisa).
 
+Identidade visual (modelo C · marca forte):
+
+- Topo escuro (azul-marinho) em todas as telas, com o verde-limão como cor de destaque e botões principais em azul-marinho.
+- Nas telas iniciais, a reputação é o número principal (4,7 da empresa, 4,8 do João), com três números logo abaixo e a busca sobreposta ao topo.
+- A compatibilidade com a vaga aparece como um anel ("5/5") nos cards de profissionais e de vagas.
+- Cores e raios ficam nas variáveis de `:root`, no início de `styles.css`; a camada do modelo C está no fim do arquivo.
+
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (49 passos, ~208 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (49 passos, ~212 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -126,4 +133,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260930-1`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260930-2`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
