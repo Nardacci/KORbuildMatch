@@ -20,6 +20,9 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `avaliar-empresa.html?id=ID` | Profissional: avaliação cega da empresa |
 | `mensagens.html?como=empresa\|profissional` | As duas jornadas: lista de conversas |
 | `conversa.html?id=ID&como=empresa\|profissional` | As duas jornadas: chat de uma conversa |
+| `vagas.html` | Empresa: minhas vagas por estado (Abertas, Pausadas, Rascunhos, Encerradas) |
+| `minha-empresa.html` | Empresa: dados da empresa, plano Essencial, reputação e vagas preenchidas |
+| `perfil.html` | Profissional: meu perfil (ver, editar e privacidade) |
 | `buscar.html?como=empresa\|profissional` | Busca com filtros de localização opcionais (empresa busca profissionais; profissional busca vagas) |
 
 Interações simuladas:
@@ -74,6 +77,27 @@ Localização (documento v0.2, seções 6, 7, 10 e 10.1):
 - **Busca (seções 10 e 10.1):** a localização é um filtro opcional, desligado por padrão e controlado por quem pesquisa: distância (a partir da sede da empresa ou da região do profissional), país, estado, cidade, modelo de trabalho, disposto a se mudar (só na busca da empresa) e fuso horário. Na busca de vagas, as remotas aparecem com qualquer distância.
 - **Cidades conhecidas:** `mock-data.js` traz uma lista de cidades com o ponto aproximado (em `localizacao.cidades`). Ao publicar uma vaga numa cidade fora da lista, ela é publicada normalmente, mas as indicações não são filtradas por distância (a tela avisa).
 
+Abas que faltavam (seções 6, 7 e 16):
+
+- **Minhas vagas** (`vagas.html`): vagas agrupadas por estado — Abertas, Pausadas, Rascunhos e Encerradas (Preenchida, Cancelada, Expirada). Ações: pausar, reabrir, cancelar (a tela diz quantos candidatos em aberto recebem o aviso), editar e excluir rascunho. A vaga "Operador de caixa" vem expirada no mock.
+- **Editar vaga e rascunho**: `publicar-vaga.html?editar=ID` abre o formulário já preenchido; "Salvar rascunho" guarda a vaga só com o título, e ela só aparece para profissionais depois de publicada.
+- **Minha empresa** (`minha-empresa.html`): nome, setor, porte, site, descrição, várias localizações e canal comercial (editáveis), reputação com a taxa de resposta, vagas preenchidas pela plataforma e o **plano Essencial**: grátis por 3 meses a partir da primeira vaga, cartão só no fim, uso de vagas ativas (até 3) e convites do mês (até 30). No perfil público da empresa, as vagas preenchidas aparecem sem o nome de quem foi contratado.
+- **Meu perfil** (`perfil.html`): o João vê e edita título, apresentação, disponibilidade, tipo de contratação, modelos de trabalho, cidade, distância máxima, se aceita se mudar, contato preferido, competências e certificações. A **privacidade** define, para apresentação, disponibilidade, experiência declarada e certificações, se a parte é pública, só para empresas ou privada; a visão da empresa respeita isso. A reputação verificada não é editável.
+
+Resposta garantida (seção 7.1):
+
+- **Prazo de 7 dias vencido**: a empresa vê "Prazo vencido" no candidato e um lembrete no topo da tela inicial; o profissional vê "Sem resposta no prazo · a empresa recebeu um lembrete" (a candidatura "Atendente de caixa", no Café Aurora, já vem assim).
+- **Retirar candidatura**: o profissional retira (com confirmação) qualquer candidatura em andamento; a empresa vê "Retirou a candidatura".
+- **Marcar vários como não selecionados**: em Candidatos, "Selecionar vários" e uma mensagem padrão respeitosa, editável antes de enviar. O João recebe a mensagem na candidatura dele.
+- **Vaga encerrada**: quando a vaga é preenchida, cancelada ou expira, quem ainda estava em aberto recebe o aviso automaticamente. Vaga pausada ou encerrada some da busca e das indicações do profissional e não recebe candidaturas.
+- **Taxa de resposta** da empresa ("Responde 97% das candidaturas em até 7 dias") no perfil da empresa e no detalhe da vaga.
+
+Conexões (seção 9):
+
+- **Convite visível**: "A empresa X convidou você" aparece na tela inicial do profissional (com "Agora não") e em destaque na vaga. O convite do Grupo Horizonte vem no mock; um convite feito pela Empresa Exemplo na sessão também chega ao João.
+- **Salvar profissional**: botão "Salvar" nos indicados, na busca e no perfil; a lista fica em "Talentos da empresa" (tela inicial) e na busca há o filtro "Só talentos salvos".
+- **Recontratação**: "Vocês já trabalharam juntos · Chamar de novo" (empresa, no perfil da Ana Souza) e "Você já trabalhou aqui · Falar com a empresa de novo" (profissional, no perfil da Loja Central), abrindo a conversa com uma mensagem pronta.
+
 Identidade visual (modelo C · marca forte):
 
 - Topo escuro (azul-marinho) em todas as telas, com o verde-limão como cor de destaque e botões principais em azul-marinho.
@@ -83,7 +107,7 @@ Identidade visual (modelo C · marca forte):
 
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (49 passos, ~212 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (61 passos, ~269 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -107,6 +131,7 @@ preencher-vaga.html, avaliar-profissional.html
 vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
 mensagens.html, conversa.html
 buscar.html               busca com filtros de localização (as duas jornadas)
+vagas.html, minha-empresa.html, perfil.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
@@ -133,4 +158,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260930-2`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260930-6`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.

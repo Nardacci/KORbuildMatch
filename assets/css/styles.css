@@ -1397,3 +1397,44 @@ body[data-page="login"] .app {
 .login-foot { color: var(--on-dark); }
 .login-foot a { color: var(--lime); }
 .segmented button[aria-pressed="true"] { color: var(--ink); }
+
+/* ---------- Minha empresa: plano e uso ---------- */
+
+.plan-card { background: var(--ink); color: #FFFFFF; }
+.plan-card .row-sub { color: var(--on-dark); }
+.plan-card .btn-outline { background: rgba(255, 255, 255, 0.1); color: #FFFFFF; }
+.plan-card :focus-visible { outline-color: var(--lime); }
+.chip.lime { background: var(--lime); color: var(--ink); }
+.usage-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: -6px; }
+.usage-row span { color: var(--on-dark); }
+.usage { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.usage span { display: block; height: 100%; border-radius: 4px; background: var(--lime); }
+.plain-list li { display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Meu perfil: privacidade ---------- */
+
+.priv-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px; align-items: center; gap: 8px; }
+.priv-row span { font-size: 14px; font-weight: 600; color: var(--ink); }
+
+/* ---------- Resposta garantida: prazo vencido e seleção em lote ---------- */
+
+.chip.red { background: #FDE8E4; color: #B42318; }
+.sel-check { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.sel-check input { width: 20px; height: 20px; accent-color: var(--ink); }
+.sel-bar {
+  position: sticky; top: 76px; z-index: 5;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px; border-radius: var(--radius-md);
+  background: var(--ink); color: #FFFFFF; font-size: 14px; font-weight: 700;
+}
+.sel-bar .btn-primary { background: var(--lime); color: var(--ink); }
+.sel-bar .btn-outline { background: rgba(255, 255, 255, 0.12); color: #FFFFFF; }
+.sel-bar :focus-visible { outline-color: var(--lime); }
+.btn[aria-disabled="true"] { opacity: 0.5; }
+
+/* ---------- Conexões: convites e talentos ---------- */
+
+.card-convite { border: 2px solid var(--blue); box-shadow: 0 0 0 4px rgba(31, 79, 216, 0.12), var(--shadow); }
+.sub-h { margin: 6px 0 0; font-size: 14px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+[data-salvar][aria-pressed="true"] { background: var(--ink); color: #FFFFFF; }
+.avatar.avatar-empresa { color: #FFFFFF; background: var(--ink); }

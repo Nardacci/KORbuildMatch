@@ -93,6 +93,16 @@
       // Sede: ponto de partida da distância na busca de profissionais.
       loc: onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361),
 
+      // Plano (seção 16): Essencial, com 3 meses grátis contados a partir da primeira vaga publicada.
+      // O cartão só é pedido quando o período gratuito termina.
+      plano: {
+        nome: 'Essencial', preco: 'US$ 79,00/mês', gratisDesde: '2026-08-20', mesesGratis: 3,
+        limiteVagasAtivas: 3, limiteConvitesMes: 30, convitesUsadosMes: 4
+      },
+
+      // Opções do perfil da empresa.
+      portes: ['1 a 9 pessoas', '10 a 49 pessoas', '50 a 249 pessoas', '250 pessoas ou mais'],
+
       // Quantos requisitos uma vaga tem, quando ela não informa (vagas publicadas na demonstração).
       requisitosPadrao: 5,
 
@@ -117,7 +127,16 @@
         { id: 'recepcionista', titulo: 'Recepcionista', status: 'Aberta', posicoes: 1 },
         { id: 'atendente', titulo: 'Atendente de loja', status: 'Aberta', posicoes: 2 },
         { id: 'auxiliar', titulo: 'Auxiliar administrativo', status: 'Pausada', posicoes: 1 },
-        { id: 'vendedora', titulo: 'Vendedora', status: 'Preenchida', posicoes: 1, detalhe: 'Preenchida por Ana Souza · confirmado' }
+        { id: 'vendedora', titulo: 'Vendedora', status: 'Preenchida', posicoes: 1, detalhe: 'Preenchida por Ana Souza · confirmado' },
+        { id: 'caixa', titulo: 'Operador de caixa', status: 'Expirada', posicoes: 1, detalhe: 'Expirou em 12/09 sem ninguém contratado' }
+      ],
+
+      // Estados possíveis de uma vaga (seção 7) e como aparecem agrupados em "Minhas vagas".
+      estadosVaga: [
+        { id: 'abertas', rotulo: 'Abertas', status: ['Aberta'] },
+        { id: 'pausadas', rotulo: 'Pausadas', status: ['Pausada'] },
+        { id: 'rascunhos', rotulo: 'Rascunhos', status: ['Rascunho'] },
+        { id: 'encerradas', rotulo: 'Encerradas', status: ['Preenchida', 'Cancelada', 'Expirada'] }
       ],
 
       // Etapas do funil de candidatos. "manual: false" não aparece no seletor de status.
@@ -125,8 +144,19 @@
         { id: 'novo', rotulo: 'Novos', singular: 'Novo' },
         { id: 'conversa', rotulo: 'Em conversa', singular: 'Em conversa' },
         { id: 'nao', rotulo: 'Não selecionados', singular: 'Não selecionado' },
-        { id: 'contratado', rotulo: 'Contratados', singular: 'Contratado', manual: false }
+        { id: 'contratado', rotulo: 'Contratados', singular: 'Contratado', manual: false },
+        { id: 'retirada', rotulo: 'Retiraram', singular: 'Retirou a candidatura', manual: false },
+        { id: 'encerrada', rotulo: 'Vaga encerrada', singular: 'Avisado: vaga encerrada', manual: false }
       ],
+
+      // Mensagem padrão ao marcar vários candidatos como não selecionados (a empresa pode editar).
+      // Conexões (seção 9): talentos salvos para vagas futuras e quem já trabalhou com a empresa
+      // (vínculo verificado), que pode ser chamado de novo com um toque.
+      salvos: ['paulo-andrade', 'beatriz-nunes'],
+      jaTrabalharam: [{ id: 'ana-souza', funcao: 'Vendedora', periodo: '2026 – atual' }],
+
+      mensagemNaoSelecionado: 'Olá! Obrigado pelo interesse na vaga de {vaga}. Desta vez seguimos com outro perfil, mas seu perfil continua visível para as nossas próximas vagas.',
+      prazoRespostaDias: 7,
 
       // Quem se candidatou a cada vaga. "atende" = quantos requisitos da vaga a pessoa atende.
       // "data" = quando se candidatou; usada para o prazo de 7 dias ("Responder até").
@@ -154,7 +184,7 @@
             candidatura: { triagem: { 0: 'Não' }, pretensao: { valor: 2600, moeda: 'BRL', periodo: 'mes' } } },
           { id: 'paulo-andrade', atende: 4, status: 'conversa', data: '2026-09-18' },
           { id: 'lucas-teixeira', atende: 4, status: 'novo', data: '2026-09-25' },
-          { id: 'thiago-pereira', atende: 5, status: 'novo', data: '2026-09-26' },
+          { id: 'thiago-pereira', atende: 5, status: 'novo', data: '2026-09-18' },
           { id: 'juliana-alves', atende: 5, status: 'novo', data: '2026-09-27' },
           { id: 'diego-martins', atende: 3, status: 'novo', data: '2026-09-24' },
           { id: 'fernanda-costa', atende: 3, status: 'nao', data: '2026-09-05' }
@@ -394,6 +424,11 @@
       'joao-silva': {
         nome: 'João Silva', iniciais: 'JS', cor: '#DCE6F7',
         resumo: 'Recepcionista · 3 anos de experiência',
+        apresentacao: 'Gosto de receber bem as pessoas e deixar a agenda sempre em ordem. Tenho experiência em clínica, hotel e loja.',
+        tipos: ['Tempo integral', 'Meio período'], canal: 'whatsapp',
+        certificacoes: ['Primeiros socorros · 2025', 'Atendimento ao cliente · 40 h'],
+        // Quem vê cada parte do perfil: 'publico', 'empresas' (só empresas) ou 'privado'.
+        visibilidade: { apresentacao: 'publico', declarada: 'publico', disponibilidade: 'empresas', certificacoes: 'publico' },
         loc: onde('São Paulo', 'SP', 'Brasil', -23.5020, -46.6250), disponibilidade: 'Disponível imediatamente',
         distanciaMax: 25, aceitaMudar: false, modelos: ['presencial', 'hibrido', 'remoto'],
         nota: '4,8', trabalhos: 6, contrataria: '100%', verificado: true,
@@ -583,6 +618,16 @@
     empresas: {
       'empresa-exemplo': {
         nome: 'Empresa Exemplo', iniciais: 'EE', setor: 'Comércio e serviços', loc: onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361), verificada: true,
+        porte: '10 a 49 pessoas', site: 'empresaexemplo.com.br', canal: 'whatsapp', taxaResposta: '92%',
+        descricao: 'Lojas de conveniência e serviços no centro de São Paulo. Valorizamos pontualidade, bom atendimento e crescimento interno.',
+        localizacoes: [onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361), onde('Campinas', 'SP', 'Brasil', -22.9056, -47.0608)],
+        // Vagas preenchidas pela plataforma. No perfil público aparece só a função e a data (o nome de
+        // quem foi contratado fica na tela da própria empresa).
+        preenchidas: [
+          { titulo: 'Vendedora', quem: 'Ana Souza', quando: 'jun/2026' },
+          { titulo: 'Estoquista', quem: 'Bruno Tavares', quando: 'mar/2026' },
+          { titulo: 'Recepcionista', quem: 'Camila Reis', quando: 'nov/2025' }
+        ],
         nota: REP_EXEMPLO.nota, contratacoes: REP_EXEMPLO.contratacoes, pagouConforme: REP_EXEMPLO.pagouConforme,
         correspondia: '94%', trabalhariaNovamente: '91%',
         avaliacoes: [
@@ -595,6 +640,9 @@
       'loja-central': {
         nome: 'Loja Central', iniciais: 'LC', setor: 'Varejo', loc: onde('São Paulo', 'SP', 'Brasil', -23.5670, -46.7020), verificada: true,
         nota: '4,6', contratacoes: 31, pagouConforme: '98%', correspondia: '95%', trabalhariaNovamente: '92%',
+        porte: '50 a 249 pessoas', site: 'lojacentral.com.br', taxaResposta: '97%',
+        descricao: 'Rede de lojas de varejo com 12 unidades na Grande São Paulo.',
+        preenchidas: [{ titulo: 'Vendedora', quando: 'jan/2026' }, { titulo: 'Atendente', quando: 'jan/2025' }],
         avaliacoes: [
           { autor: 'Ana S.', quando: 'há 8 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
             comentario: 'Metas claras e comissão paga no prazo.', resposta: 'Ana foi uma referência para a equipe. Obrigado!' },
@@ -605,6 +653,8 @@
       'grupo-horizonte': {
         nome: 'Grupo Horizonte', iniciais: 'GH', setor: 'Serviços administrativos', loc: onde('São Paulo', 'SP', 'Brasil', -23.5614, -46.6559), verificada: true,
         nota: '4,7', contratacoes: 12, pagouConforme: '100%', correspondia: '96%', trabalhariaNovamente: '94%',
+        porte: '10 a 49 pessoas', taxaResposta: '100%',
+        descricao: 'Serviços administrativos terceirizados para pequenas empresas, com trabalho híbrido.',
         avaliacoes: [
           { autor: 'Fernanda C.', quando: 'há 7 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
             comentario: 'Trabalho híbrido bem organizado e gestão respeitosa.' }
@@ -613,6 +663,8 @@
       'hotel-vista-mar': {
         nome: 'Hotel Vista Mar', iniciais: 'HV', setor: 'Hotelaria', loc: onde('Santos', 'SP', 'Brasil', -23.9608, -46.3336), verificada: true,
         nota: '4,5', contratacoes: 18, pagouConforme: '95%', correspondia: '90%', trabalhariaNovamente: '89%',
+        porte: '50 a 249 pessoas', site: 'hotelvistamar.com.br', taxaResposta: '88%',
+        descricao: 'Hotel de frente para o mar em Santos, com 120 quartos.',
         avaliacoes: [
           { autor: 'Mariana R.', quando: 'há 1 ano', nota: 4, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Parcialmente'),
             comentario: 'Boa estrutura. Na alta temporada a carga de trabalho aumenta bastante.' }
@@ -621,6 +673,7 @@
       'cafe-aurora': {
         nome: 'Café Aurora', iniciais: 'CA', setor: 'Alimentação', loc: onde('São Paulo', 'SP', 'Brasil', -23.5880, -46.6820), verificada: false,
         nota: '4,4', contratacoes: 9, pagouConforme: '93%', correspondia: '92%', trabalhariaNovamente: '88%',
+        porte: '1 a 9 pessoas', taxaResposta: '81%',
         avaliacoes: [
           { autor: 'Juliana A.', quando: 'há 4 meses', nota: 4, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
             comentario: 'Equipe unida e gorjetas divididas com transparência.' }
@@ -820,12 +873,19 @@
       // "Recepcionista de hotel" (Santos, ~60 km) fica de fora com a distância máxima padrão do João (25 km).
       vagasIndicadas: ['atendente-loja', 'assistente-adm', 'suporte-cliente', 'recepcao-santos'],
 
+      // Convites diretos de empresas (seção 7.1: "A Empresa X convidou você").
+      convites: [
+        { id: 'convite-horizonte', empresa: 'grupo-horizonte', vaga: 'assistente-adm', data: '2026-09-27',
+          mensagem: 'Oi, João! Seu perfil combina com a nossa vaga de assistente administrativo. Quer se candidatar?' }
+      ],
+
       // Candidaturas anteriores. "confirmar": a candidatura acompanha a contratação em andamento (Recepcionista);
       // "avaliar": contratado e confirmado, com avaliação da empresa pendente.
       candidaturas: [
         { id: 'recepcionista-exemplo', vaga: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo', data: '2026-09-02', status: 'visualizada', confirmar: true },
         { id: 'atendente-hotel', vaga: null, titulo: 'Recepcionista de plantão', empresa: 'hotel-vista-mar', data: '2026-09-15', status: 'conversa' },
         { id: 'atendente-cafe', vaga: null, titulo: 'Atendente de balcão', empresa: 'cafe-aurora', data: '2026-08-20', status: 'nao', alcancou: 'conversa' },
+        { id: 'caixa-cafe', vaga: null, titulo: 'Atendente de caixa', empresa: 'cafe-aurora', data: '2026-09-12', status: 'enviada' },
         { id: 'suporte-retirada', vaga: null, titulo: 'Atendente de suporte', empresa: 'nova-rota', data: '2026-09-05', status: 'retirada', alcancou: 'enviada' },
         { id: 'vendas-encerrada', vaga: null, titulo: 'Vendedora', empresa: 'loja-central', data: '2026-07-10', status: 'encerrada', alcancou: 'conversa' },
         { id: 'atendente-loja-anterior', vaga: null, titulo: 'Atendente', empresa: 'loja-central', data: '2025-01-12', status: 'contratado', avaliar: true }
