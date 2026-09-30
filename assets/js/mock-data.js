@@ -144,8 +144,19 @@
         { id: 'novo', rotulo: 'Novos', singular: 'Novo' },
         { id: 'conversa', rotulo: 'Em conversa', singular: 'Em conversa' },
         { id: 'nao', rotulo: 'Não selecionados', singular: 'Não selecionado' },
-        { id: 'contratado', rotulo: 'Contratados', singular: 'Contratado', manual: false }
+        { id: 'contratado', rotulo: 'Contratados', singular: 'Contratado', manual: false },
+        { id: 'retirada', rotulo: 'Retiraram', singular: 'Retirou a candidatura', manual: false },
+        { id: 'encerrada', rotulo: 'Vaga encerrada', singular: 'Avisado: vaga encerrada', manual: false }
       ],
+
+      // Mensagem padrão ao marcar vários candidatos como não selecionados (a empresa pode editar).
+      // Conexões (seção 9): talentos salvos para vagas futuras e quem já trabalhou com a empresa
+      // (vínculo verificado), que pode ser chamado de novo com um toque.
+      salvos: ['paulo-andrade', 'beatriz-nunes'],
+      jaTrabalharam: [{ id: 'ana-souza', funcao: 'Vendedora', periodo: '2026 – atual' }],
+
+      mensagemNaoSelecionado: 'Olá! Obrigado pelo interesse na vaga de {vaga}. Desta vez seguimos com outro perfil, mas seu perfil continua visível para as nossas próximas vagas.',
+      prazoRespostaDias: 7,
 
       // Quem se candidatou a cada vaga. "atende" = quantos requisitos da vaga a pessoa atende.
       // "data" = quando se candidatou; usada para o prazo de 7 dias ("Responder até").
@@ -173,7 +184,7 @@
             candidatura: { triagem: { 0: 'Não' }, pretensao: { valor: 2600, moeda: 'BRL', periodo: 'mes' } } },
           { id: 'paulo-andrade', atende: 4, status: 'conversa', data: '2026-09-18' },
           { id: 'lucas-teixeira', atende: 4, status: 'novo', data: '2026-09-25' },
-          { id: 'thiago-pereira', atende: 5, status: 'novo', data: '2026-09-26' },
+          { id: 'thiago-pereira', atende: 5, status: 'novo', data: '2026-09-18' },
           { id: 'juliana-alves', atende: 5, status: 'novo', data: '2026-09-27' },
           { id: 'diego-martins', atende: 3, status: 'novo', data: '2026-09-24' },
           { id: 'fernanda-costa', atende: 3, status: 'nao', data: '2026-09-05' }
@@ -862,12 +873,19 @@
       // "Recepcionista de hotel" (Santos, ~60 km) fica de fora com a distância máxima padrão do João (25 km).
       vagasIndicadas: ['atendente-loja', 'assistente-adm', 'suporte-cliente', 'recepcao-santos'],
 
+      // Convites diretos de empresas (seção 7.1: "A Empresa X convidou você").
+      convites: [
+        { id: 'convite-horizonte', empresa: 'grupo-horizonte', vaga: 'assistente-adm', data: '2026-09-27',
+          mensagem: 'Oi, João! Seu perfil combina com a nossa vaga de assistente administrativo. Quer se candidatar?' }
+      ],
+
       // Candidaturas anteriores. "confirmar": a candidatura acompanha a contratação em andamento (Recepcionista);
       // "avaliar": contratado e confirmado, com avaliação da empresa pendente.
       candidaturas: [
         { id: 'recepcionista-exemplo', vaga: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo', data: '2026-09-02', status: 'visualizada', confirmar: true },
         { id: 'atendente-hotel', vaga: null, titulo: 'Recepcionista de plantão', empresa: 'hotel-vista-mar', data: '2026-09-15', status: 'conversa' },
         { id: 'atendente-cafe', vaga: null, titulo: 'Atendente de balcão', empresa: 'cafe-aurora', data: '2026-08-20', status: 'nao', alcancou: 'conversa' },
+        { id: 'caixa-cafe', vaga: null, titulo: 'Atendente de caixa', empresa: 'cafe-aurora', data: '2026-09-12', status: 'enviada' },
         { id: 'suporte-retirada', vaga: null, titulo: 'Atendente de suporte', empresa: 'nova-rota', data: '2026-09-05', status: 'retirada', alcancou: 'enviada' },
         { id: 'vendas-encerrada', vaga: null, titulo: 'Vendedora', empresa: 'loja-central', data: '2026-07-10', status: 'encerrada', alcancou: 'conversa' },
         { id: 'atendente-loja-anterior', vaga: null, titulo: 'Atendente', empresa: 'loja-central', data: '2025-01-12', status: 'contratado', avaliar: true }

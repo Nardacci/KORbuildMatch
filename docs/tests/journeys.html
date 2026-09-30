@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (54 passos, ~245 verificações).
+  KORbuild Match — testes automatizados (61 passos, ~269 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -14,6 +14,9 @@
     D — Cobertura complementar (validação básica, perfis, avaliações)
     E — Localização: indicações nos arredores (raio da vaga + distância máxima
         do profissional, aviso para ampliar, vaga remota) e busca com filtros opcionais
+    F — Abas que faltavam: Minhas vagas, editar/rascunho, Minha empresa (plano) e Meu perfil
+    G — Resposta garantida: prazo vencido, seleção em lote, retirar candidatura, vaga encerrada
+    H — Conexões: convite visível, salvar profissional e recontratação
 -->
 <meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
 <iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
@@ -722,6 +725,98 @@ var steps = [
     await go('profissional.html?aba=vagas');
     L(txt('#acc-vagas-sum') === '4 vagas indicadas', 'meu perfil: distância máxima de 60 km vale nas indicações: ' + txt('#acc-vagas-sum'));
     L(!hasHScroll(), 'meu perfil: sem rolagem horizontal');
+  },
+
+  /* ===== BLOCO G — Resposta garantida (seção 7.1) ===== */
+
+  // G1: prazo de 7 dias vencido: lembrete para a empresa
+  async function () {
+    await fresh(); await go('empresa.html');
+    L(/candidato esperando resposta há mais de 7 dias/.test(txt('.content')), 'home empresa: lembrete de prazo vencido');
+    await go('candidatos.html?vaga=atendente&status=novo');
+    var th = $$('#cand-list article').filter(function (a) { return /Thiago Pereira/.test(a.textContent); })[0];
+    L(!!th && /Prazo vencido em 25\/09/.test(th.textContent), 'candidatos: chip de prazo vencido');
+  },
+  // G2: marcar vários como não selecionados, com mensagem padrão
+  async function () {
+    $('[data-tool="selecionar"]').click();
+    $('[data-sel="thiago-pereira"]').click(); $('[data-sel="diego-martins"]').click();
+    L(/2 selecionados/.test(txt('.sel-bar')), 'lote: 2 selecionados');
+    $('[data-tool="abrir-nao"]').click();
+    L(/vaga de Atendente de loja/.test($('#nao-msg').value), 'lote: mensagem padrão com o nome da vaga');
+    $('[data-tool="enviar-nao"]').click();
+    L(/Não selecionados · 3/.test(txt('#cand-filter')), 'lote: os 2 viraram não selecionados: ' + txt('#cand-filter'));
+    L(!hasHScroll(), 'lote: sem rolagem horizontal');
+  },
+  // G3: o João recebe a mensagem de não selecionado; candidatura sem resposta; retirar candidatura
+  async function () {
+    await go('vaga.html?id=atendente-exemplo');
+    $('#candidatar').click(); pick('triagem-resp-0', 'Sim'); $('#enviar').click();
+    await go('candidaturas.html?status=andamento');
+    var cx = $$('#cand-list article').filter(function (a) { return /Atendente de caixa/.test(a.textContent); })[0];
+    L(!!cx && /Sem resposta no prazo/.test(cx.textContent) && /recebeu um lembrete/.test(cx.textContent), 'candidaturas: sem resposta no prazo');
+    var at = $$('#cand-list [data-retirar="atendente-exemplo"]')[0];
+    at.click();
+    L(/Retirar sua candidatura\?/.test(txt('#retirar-box')), 'retirar: pede confirmação');
+    $('[data-confirmar-retirada]').click();
+    $$('#cand-filter button')[2].click();
+    var r = $$('#cand-list article').filter(function (a) { return /Atendente de loja/.test(a.textContent) && /Empresa Exemplo/.test(a.textContent); })[0];
+    L(!!r && /Retirada/.test(r.textContent), 'retirar: vai para Encerradas como Retirada');
+    await go('candidatos.html?vaga=atendente&status=retirada');
+    L(/João Silva/.test(txt('#cand-list')) && /Retirou a candidatura/.test(txt('#cand-list')), 'retirar: a empresa vê que ele retirou');
+  },
+  // G4: vaga pausada some para o profissional; cancelada avisa quem estava em aberto
+  async function () {
+    await fresh(); await go('vagas.html');
+    $('[data-acao="pausar"][data-id="atendente"]').click();
+    await go('buscar.html?como=profissional');
+    L(txt('#busca-count') === '7 vagas encontradas', 'pausada: some da busca: ' + txt('#busca-count'));
+    await go('vaga.html?id=atendente-exemplo');
+    L(!!$('#vaga-fechada') && !$('#candidatar'), 'pausada: vaga não recebe candidaturas');
+    await go('vagas.html?grupo=pausadas');
+    $('[data-acao="cancelar"][data-id="atendente"]').click(); $('[data-acao="confirmar-cancelar"]').click();
+    await go('candidatos.html?vaga=atendente&status=encerrada');
+    L(/Vaga encerrada · 6/.test(txt('#cand-filter')) && /Avisado automaticamente/.test(txt('#cand-list')), 'cancelada: candidatos em aberto avisados: ' + txt('#cand-filter'));
+    await go('vaga.html?id=atendente-loja');
+    L(/Responde 97% das candidaturas em até 7 dias/.test(txt('.content')), 'taxa de resposta da empresa no detalhe da vaga');
+  },
+
+  /* ===== BLOCO H — Conexões (seção 9): convite, salvar profissional e recontratação ===== */
+
+  // H1: convite de empresa na tela do profissional
+  async function () {
+    await fresh();
+    L(/1 convite de empresa/.test(txt('#pend-txt')), 'convite: contado nas pendências: ' + txt('#pend-txt'));
+    L(/Grupo Horizonte convidou você/.test(txt('.card-convite')), 'convite: card "A empresa convidou você"');
+    await go('vaga.html?id=assistente-adm');
+    L(/Grupo Horizonte convidou você para esta vaga/.test(txt('#convite-banner')), 'convite: destaque na vaga');
+    await go('profissional.html');
+    $('[data-dispensar]').click();
+    L(!$('.card-convite') && !/convite/.test(txt('#pend-txt')), 'convite: "Agora não" dispensa');
+    await go('perfil-profissional.html?id=joao-silva&vaga=atendente');
+    $('#convidar').click();
+    await go('profissional.html');
+    L(/Empresa Exemplo convidou você/.test(txt('.card-convite')), 'convite: o convite da Empresa Exemplo chega ao João');
+  },
+  // H2: salvar profissional e talentos da empresa
+  async function () {
+    await go('empresa.html?aba=indicados');
+    $('#ind-list [data-salvar="mariana-rocha"]').click();
+    L($('#ind-list [data-salvar="mariana-rocha"]').getAttribute('aria-pressed') === 'true', 'salvar: botão vira "Salvo"');
+    L(/3 salvos/.test(txt('#acc-talentos-sum')) && /Mariana Rocha/.test(txt('#talentos')), 'salvar: aparece em Talentos da empresa');
+    await go('buscar.html?como=empresa');
+    $('#f-salvos-in').click();
+    L(txt('#busca-count') === '3 profissionais encontrados', 'busca: filtro só talentos salvos: ' + txt('#busca-count'));
+  },
+  // H3: recontratação com um toque, dos dois lados
+  async function () {
+    await go('perfil-profissional.html?id=ana-souza');
+    L(/Vocês já trabalharam juntos/.test(txt('#ja-trabalhou')), 'recontratar: empresa vê que já trabalharam juntos');
+    await clickNav($('#ja-trabalhou a'));
+    L(txt('.topbar-title') === 'Ana Souza' && /lembramos do seu trabalho como Vendedora/.test($('#msg-in').value), 'recontratar: conversa com mensagem pronta');
+    await go('perfil-empresa.html?id=loja-central');
+    L(/Você já trabalhou aqui/.test(txt('#ja-trabalhei')), 'recontratar: profissional vê a empresa onde já trabalhou');
+    L(!hasHScroll(), 'recontratar: sem rolagem horizontal');
   }
 ];
 (async function () {
