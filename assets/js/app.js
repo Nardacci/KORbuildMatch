@@ -1069,9 +1069,12 @@
 
     $('#content').innerHTML =
       '<div class="visually-hidden" role="status" id="live"></div>' +
-      '<div class="greeting-row"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
+      '<div class="stack"><div class="greeting-row"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
         '<p>' + (itens === 0 ? 'Nenhum item precisa da sua atenção hoje.' : (itens === 1 ? '1 item precisa' : itens + ' itens precisam') + ' da sua atenção hoje.') + '</p></div>' +
         '<a href="publicar-vaga.html" class="btn btn-primary">' + icon('plus', 16, { stroke: 2.2 }) + 'Publicar nova vaga</a></div>' +
+        // Mesmo campo de busca da tela inicial do profissional.
+        '<a href="buscar.html?como=empresa" class="row-link" id="busca-empresa" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px">' +
+          '<span style="color:var(--ink)">' + icon('search', 20, { stroke: 2 }) + '</span>Buscar profissionais ou cargos</a></div>' +
 
       '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pend + '</section>' +
 

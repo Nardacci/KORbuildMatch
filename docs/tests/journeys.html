@@ -544,6 +544,7 @@ var steps = [
     L(!!$('#ind-aviso') && /Poucos profissionais nos arredores/.test(txt('#ind-aviso')) && /Com 60 km, entra mais 1 profissional/.test(txt('#ind-aviso')), 'indicados: aviso para ampliar o raio: ' + txt('#ind-aviso'));
     L(!hasHScroll(), 'indicados: sem rolagem horizontal');
     L(btnH().length === 0, 'indicados: botoes 40px ' + JSON.stringify(btnH()));
+    L(!!$('#busca-empresa') && $('#busca-empresa').getAttribute('href') === 'buscar.html?como=empresa' && /Buscar profissionais/.test(txt('#busca-empresa')), 'home empresa: campo de busca no topo, igual ao do profissional');
   },
   // E2: ampliar o raio traz a Renata; o raio ampliado continua valendo ao voltar à tela
   async function () {
