@@ -77,7 +77,7 @@
   /* ---------- Peças comuns ---------- */
 
   function brandMark(lg) {
-    return '<div class="brand-mark' + (lg ? ' lg' : '') + '" style="color:#FFFFFF">' + icon('logo', lg ? 22 : 20, { stroke: 2 }) + '</div>';
+    return '<div class="brand-mark' + (lg ? ' lg' : '') + '">' + icon('logo', lg ? 22 : 20, { stroke: 2.2 }) + '</div>';
   }
 
   function bell(count) {
@@ -114,6 +114,27 @@
         (active ? ' aria-current="page"' : (it.href ? '' : ' data-todo="' + TODO + '"')) + '>' +
         icon(it.icon, 24, { stroke: active ? 2 : 1.8 }) + esc(it.label) + '</a>';
     }).join('');
+  }
+
+  // Anel de compatibilidade ("5/5"), com o texto completo para leitor de tela.
+  function matchRing(atende, total) {
+    var pct = Math.round(atende / total * 100);
+    return '<div class="match' + (atende / total < 0.7 ? ' low' : '') + '" style="--p:' + pct + '%" role="img" aria-label="Atende ' + atende + ' de ' + total + ' requisitos">' +
+      '<span aria-hidden="true">' + atende + '/' + total + '</span></div>';
+  }
+
+  // Topo escuro das telas iniciais: saudação, reputação em destaque e três números.
+  function heroHtml(o) {
+    return '<section class="hero-c" aria-label="Resumo">' +
+      '<div class="greeting"><h1>' + esc(o.saudacao) + '</h1><p' + (o.pId ? ' id="' + o.pId + '"' : '') + '>' + esc(o.resumo) + '</p></div>' +
+      '<div class="hero-score">' + (o.nota ? '<b>' + esc(o.nota) + '</b>' : '<b class="novo">Novo</b>') +
+        '<div><strong>★ ' + esc(o.notaTitulo) + '</strong><span>' + esc(o.notaSub) + '</span></div></div>' +
+      '<div class="hero-stats">' + o.stats.map(function (st) {
+        return '<div class="hero-stat"><b' + (st.id ? ' id="' + st.id + '"' : '') + '>' + esc(st.valor) + '</b><span>' + esc(st.rotulo) + '</span></div>';
+      }).join('') + '</div>' +
+      (o.acao || '') + '</section>' +
+      '<a href="' + esc(o.buscaHref) + '" class="row-link search-c"' + (o.buscaId ? ' id="' + o.buscaId + '"' : '') + '>' +
+        '<span>' + icon('search', 20, { stroke: 2 }) + '</span>' + esc(o.buscaTexto) + '</a>';
   }
 
   function repStat(value, label) {
@@ -794,8 +815,8 @@
       '<div class="media center"><div class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
       '<div class="row-main"><div class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</div>' +
       '<div class="row-sub">' + esc(p.resumo) + '</div>' +
-      (localTxt ? '<div class="row-sub loc-line">' + esc(localTxt) + '</div>' : '') + '</div></div>' +
-      '<div class="chips"><span class="chip green">Atende ' + atende + ' de ' + de + ' requisitos</span>' + reputacaoChip(p) + (extra || '') + '</div>' +
+      (localTxt ? '<div class="row-sub loc-line">' + esc(localTxt) + '</div>' : '') + '</div>' + matchRing(atende, de) + '</div>' +
+      '<div class="chips">' + reputacaoChip(p) + (extra || '') + '</div>' +
       (candBlock ? '<div class="cand-block">' + candBlock + '</div>' : '') +
       actions + '</article>';
   }
@@ -1002,7 +1023,7 @@
     $('#topbar').innerHTML =
       brandMark() +
       '<button type="button" class="row-main" data-todo="' + TODO + '" style="border:0;background:transparent;padding:0;text-align:left;color:inherit;min-height:44px;flex-direction:row;align-items:center;gap:6px;cursor:pointer">' +
-        '<span style="display:flex;flex-direction:column"><span style="font-size:11px;font-weight:600;color:var(--muted-2)">Empresa</span>' +
+        '<span style="display:flex;flex-direction:column"><span class="topbar-sub">Empresa</span>' +
         '<span style="font-size:15px;font-weight:800">' + esc(d.nome) + '</span></span>' +
         '<span class="chevron">' + icon('down', 16, { stroke: 2 }) + '</span></button>' +
       bell(3) +
@@ -1061,6 +1082,9 @@
     }).join('');
 
     var nAbertas = vagas.filter(function (v) { return vagaAberta(s, v); }).length;
+    var novosTotal = vagas.reduce(function (n, v) {
+      return n + candidatosDe(s, v.id).filter(function (c) { return c.status === 'novo'; }).length;
+    }, 0);
 
     function indSummary() {
       var v = vagas.filter(function (x) { return x.id === selecionada; })[0];
@@ -1069,12 +1093,19 @@
 
     $('#content').innerHTML =
       '<div class="visually-hidden" role="status" id="live"></div>' +
-      '<div class="stack"><div class="greeting-row"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
-        '<p>' + (itens === 0 ? 'Nenhum item precisa da sua atenção hoje.' : (itens === 1 ? '1 item precisa' : itens + ' itens precisam') + ' da sua atenção hoje.') + '</p></div>' +
-        '<a href="publicar-vaga.html" class="btn btn-primary">' + icon('plus', 16, { stroke: 2.2 }) + 'Publicar nova vaga</a></div>' +
-        // Mesmo campo de busca da tela inicial do profissional.
-        '<a href="buscar.html?como=empresa" class="row-link" id="busca-empresa" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px">' +
-          '<span style="color:var(--ink)">' + icon('search', 20, { stroke: 2 }) + '</span>Buscar profissionais ou cargos</a></div>' +
+      heroHtml({
+        saudacao: 'Bom dia, ' + d.nome,
+        resumo: itens === 0 ? 'Nenhum item precisa da sua atenção hoje.' : (itens === 1 ? '1 item precisa' : itens + ' itens precisam') + ' da sua atenção hoje.',
+        nota: rep.nota, notaTitulo: d.verificada ? 'Reputação verificada' : 'Reputação',
+        notaSub: plural(rep.contratacoes, 'contratação confirmada', 'contratações confirmadas'),
+        stats: [
+          { valor: nAbertas, rotulo: plural(nAbertas, 'vaga aberta', 'vagas abertas').replace(/^\d+ /, '') },
+          { valor: novosTotal, rotulo: novosTotal === 1 ? 'candidato novo' : 'candidatos novos' },
+          { valor: rep.pagouConforme, rotulo: 'pagou conforme' }
+        ],
+        acao: '<div class="hero-actions"><a href="publicar-vaga.html" class="btn btn-lime">' + icon('plus', 16, { stroke: 2.4 }) + 'Publicar nova vaga</a></div>',
+        buscaHref: 'buscar.html?como=empresa', buscaId: 'busca-empresa', buscaTexto: 'Buscar profissionais ou cargos'
+      }) +
 
       '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pend + '</section>' +
 
@@ -1084,11 +1115,6 @@
         '<div id="ind-local"></div>' +
         '<div class="section" id="ind-list" aria-live="polite"></div>' +
         '<div class="acc-more"><a href="buscar.html?como=empresa">Buscar outros profissionais</a></div>') +
-
-      accordion('acc-rep', 'Reputação da empresa', 'Nota ' + rep.nota + ' · ' + plural(rep.contratacoes, 'contratação', 'contratações'),
-        (d.verificada ? '<span class="rep-badge">' + icon('check', 14, { stroke: 2.5 }) + 'Empresa verificada</span>' : '') +
-        '<div class="rep-grid">' + repStat(rep.nota, 'Nota geral') + repStat(rep.contratacoes, 'Contratações verificadas') + repStat(rep.pagouConforme, 'Pagou conforme combinado') + '</div>' +
-        '<p class="rep-foot">Conta só contratações confirmadas pelos dois lados.</p>', true) +
 
       accordion('acc-vagas', 'Minhas vagas', plural(vagas.length, 'vaga', 'vagas') + ' · ' + plural(nAbertas, 'aberta', 'abertas'),
         '<div class="list">' + vagasHtml + '</div>' + accMore('Ver todas'));
@@ -2012,7 +2038,6 @@
 
   function vagaCard(vagaId) {
     var v = vagaJob(vagaId), e = empresaDe(v.empresa), c = compat(v);
-    var chipReq = c.atende / c.total < 0.7 ? 'grey' : 'green';
     var repEmpresa = e.novo
       ? '<div><span class="chip blue">Empresa nova · reputação em construção</span></div>'
       : '<div class="row-sub" style="display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ink)"><span style="color:var(--amber)">' +
@@ -2025,7 +2050,7 @@
         '<div class="row-main"><h3 class="row-title vaga-title"><a href="vaga.html?id=' + q(v.id) + '" class="card-link">' + esc(v.titulo) + '</a></h3>' +
         '<div class="row-sub">' + empresaLink(v.empresa) + ' · ' + esc(v.modelo) + ' · ' + esc(v.tipo) + '</div>' +
         '<div class="row-sub loc-line">' + esc(localVagaTexto(v)) + '</div></div>' +
-        '<span class="chip ' + chipReq + '">' + c.atende + ' de ' + c.total + '</span></div>' +
+        matchRing(c.atende, c.total) + '</div>' +
       repEmpresa + extra + '</article>';
   }
 
@@ -2058,6 +2083,8 @@
       bell(2) +
       '<a href="index.html" class="avatar blue" aria-label="Minha conta (sair)">' + esc(d.iniciais) + '</a>';
 
+    var emAndamento = candidaturasDe(sp).filter(function (c) { return GRUPO[c.status] === 'andamento'; }).length;
+
     var avaliar = sp.avaliados[av.empresa]
       ? rowStatic({ icone: 'check', tom: 'blue', titulo: 'Avaliação de ' + avEmpresa.nome + ' enviada',
           texto: 'Fica oculta até a empresa enviar a dela ou o prazo terminar.' })
@@ -2068,16 +2095,18 @@
     var pendItens = '<div class="card card-highlight" id="confirm-card" aria-live="polite"></div>' + avaliar;
 
     $('#content').innerHTML =
-      '<div class="stack"><div class="greeting"><h1>Olá, ' + esc(d.nome) + '</h1>' +
-        '<p id="pend-txt">' + esc(pendTexto(sp)) + '</p></div>' +
-        '<a href="buscar.html?como=profissional" class="row-link" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px">' +
-          '<span style="color:var(--ink)">' + icon('search', 20, { stroke: 2 }) + '</span>Buscar vagas, cargos ou empresas</a></div>' +
+      heroHtml({
+        saudacao: 'Olá, ' + d.nome, resumo: pendTexto(sp), pId: 'pend-txt',
+        nota: rep.nota, notaTitulo: 'Sua reputação', notaSub: plural(rep.trabalhos, 'trabalho verificado', 'trabalhos verificados'),
+        stats: [
+          { valor: rep.contratariamDeNovo, rotulo: 'contratariam de novo' },
+          { valor: vagasIndicadasDe().dentro.length, rotulo: 'vagas perto de você', id: 'stat-vagas' },
+          { valor: emAndamento, rotulo: emAndamento === 1 ? 'candidatura em andamento' : 'candidaturas em andamento' }
+        ],
+        buscaHref: 'buscar.html?como=profissional', buscaTexto: 'Buscar vagas, cargos ou empresas'
+      }) +
 
       '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pendItens + '</section>' +
-
-      accordion('acc-rep', 'Minha reputação', 'Nota ' + rep.nota + ' · ' + plural(rep.trabalhos, 'trabalho', 'trabalhos'),
-        '<div class="rep-grid">' + repStat(rep.nota, 'Nota geral') + repStat(rep.trabalhos, 'Trabalhos verificados') + repStat(rep.contratariamDeNovo, 'Contratariam de novo') + '</div>' +
-        accMore('Ver perfil'), true) +
 
       accordion('acc-vagas', 'Vagas indicadas para você', plural(vagasIndicadasDe().dentro.length, 'vaga indicada', 'vagas indicadas'),
         '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Combinam com o seu perfil e são de empresas com reputação no mesmo nível da sua.</span></p>' +
@@ -2094,6 +2123,7 @@
     function paintVagasIndicadas() {
       var vi = vagasIndicadasDe();
       $('#acc-vagas-sum').textContent = plural(vi.dentro.length, 'vaga indicada', 'vagas indicadas');
+      $('#stat-vagas').textContent = vi.dentro.length;
       $('#vagas-ind').innerHTML = (vi.dentro.length ? vi.dentro.map(vagaCard).join('')
         : '<div class="empty"><p class="row-title">Nenhuma vaga indicada nessa distância.</p></div>') +
         (vi.fora.length ? '<p class="row-sub" id="vagas-fora">' + esc(plural(vi.fora.length, 'vaga indicada não aparece', 'vagas indicadas não aparecem')) +
@@ -2110,7 +2140,7 @@
     paintVagasIndicadas();
 
     // Vindo de outra tela, já abre a seção pedida.
-    var aba = { vagas: 'acc-vagas', reputacao: 'acc-rep' }[params.get('aba')];
+    var aba = { vagas: 'acc-vagas' }[params.get('aba')];
     if (aba) $('#' + aba + '-btn').click();
 
     $('#nav').innerHTML = profNav('inicio');
