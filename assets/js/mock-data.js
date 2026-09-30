@@ -19,15 +19,79 @@
     return { funcao: funcao, tipoContratacao: tipoContratacao, moeda: moeda, periodo: periodo, valor: valor, dataInicio: dataInicio, jornada: jornada };
   }
 
+  // Onde fica uma pessoa, empresa ou vaga: cidade, estado, país e um ponto aproximado (centro do
+  // bairro ou da cidade, nunca o endereço). As distâncias são calculadas em linha reta a partir dele.
+  function onde(cidade, estado, pais, lat, lng) {
+    return { cidade: cidade, estado: estado, pais: pais, lat: lat, lng: lng };
+  }
+
+  // Raio de busca de uma vaga presencial ou híbrida ('km' ou 'mi').
+  function raio(valor, unidade) {
+    return { valor: valor, unidade: unidade };
+  }
+
   // Reputação da Empresa Exemplo: a mesma na jornada da empresa e na do profissional.
   var REP_EXEMPLO = { nota: '4,7', contratacoes: 23, pagouConforme: '96%' };
 
-  window.MOCK = {
+  var M = window.MOCK = {
+    // Regras de localização (documento v0.2, seções 6, 7, 10 e 10.1). No MVP, distância em linha reta.
+    localizacao: {
+      // Raio padrão das vagas presenciais e híbridas: 25 milhas nos EUA, 40 km nos demais países.
+      paisesEmMilhas: ['Estados Unidos'],
+      raioPadrao: { km: 40, mi: 25 },
+      raios: { km: [10, 25, 40, 60, 100], mi: [5, 10, 25, 40, 60] },
+      // Com menos indicados que isso dentro do raio, a empresa vê o aviso para ampliar o raio.
+      minimoIndicados: 3,
+      // Opções de "distância máxima que aceito" no perfil do profissional, em km.
+      distanciasPerfil: [5, 10, 15, 25, 40, 60, 100],
+      // Vagas remotas não usam distância: entra quem aceita trabalho remoto e, se a vaga definir
+      // um fuso, quem está a até N horas de diferença dele.
+      toleranciaFusoHoras: 3,
+      // Fusos em horário padrão (sem horário de verão), em horas a partir do UTC.
+      fusos: [
+        { id: -6, rotulo: 'UTC−6 · Cidade do México' },
+        { id: -5, rotulo: 'UTC−5 · Nova York, Miami, Toronto' },
+        { id: -3, rotulo: 'UTC−3 · Brasília, Buenos Aires' },
+        { id: 0, rotulo: 'UTC+0 · Lisboa, Londres' },
+        { id: 1, rotulo: 'UTC+1 · Madri, Berlim' }
+      ],
+      fusoPorPais: { 'Brasil': -3, 'Portugal': 0, 'Estados Unidos': -5, 'Canadá': -5, 'Reino Unido': 0, 'Alemanha': 1, 'Espanha': 1, 'Argentina': -3, 'México': -6 },
+      // Cidades que o protótipo sabe localizar (ao publicar uma vaga). Centro aproximado de cada uma.
+      cidades: [
+        onde('São Paulo', 'SP', 'Brasil', -23.5505, -46.6333),
+        onde('Campinas', 'SP', 'Brasil', -22.9056, -47.0608),
+        onde('Guarulhos', 'SP', 'Brasil', -23.4538, -46.5333),
+        onde('Osasco', 'SP', 'Brasil', -23.5325, -46.7917),
+        onde('Santo André', 'SP', 'Brasil', -23.6639, -46.5383),
+        onde('São Bernardo do Campo', 'SP', 'Brasil', -23.6914, -46.5646),
+        onde('Diadema', 'SP', 'Brasil', -23.6861, -46.6228),
+        onde('Barueri', 'SP', 'Brasil', -23.5057, -46.8790),
+        onde('Jundiaí', 'SP', 'Brasil', -23.1857, -46.8978),
+        onde('Santos', 'SP', 'Brasil', -23.9608, -46.3336),
+        onde('Rio de Janeiro', 'RJ', 'Brasil', -22.9068, -43.1729),
+        onde('Belo Horizonte', 'MG', 'Brasil', -19.9167, -43.9345),
+        onde('Curitiba', 'PR', 'Brasil', -25.4284, -49.2733),
+        onde('Lisboa', '', 'Portugal', 38.7223, -9.1393),
+        onde('Porto', '', 'Portugal', 41.1579, -8.6291),
+        onde('Miami', 'FL', 'Estados Unidos', 25.7617, -80.1918),
+        onde('Orlando', 'FL', 'Estados Unidos', 28.5383, -81.3792),
+        onde('Nova York', 'NY', 'Estados Unidos', 40.7128, -74.0060),
+        onde('Toronto', 'ON', 'Canadá', 43.6532, -79.3832),
+        onde('Londres', '', 'Reino Unido', 51.5074, -0.1278),
+        onde('Berlim', '', 'Alemanha', 52.5200, 13.4050),
+        onde('Madri', '', 'Espanha', 40.4168, -3.7038),
+        onde('Buenos Aires', '', 'Argentina', -34.6037, -58.3816),
+        onde('Cidade do México', '', 'México', 19.4326, -99.1332)
+      ]
+    },
+
     empresa: {
       nome: 'Empresa Exemplo',
       iniciais: 'EE',
       verificada: true,
       reputacao: REP_EXEMPLO,
+      // Sede: ponto de partida da distância na busca de profissionais.
+      loc: onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361),
 
       // Quantos requisitos uma vaga tem, quando ela não informa (vagas publicadas na demonstração).
       requisitosPadrao: 5,
@@ -106,25 +170,36 @@
         ]
       },
 
-      // Indicações da plataforma por vaga aberta (quem ainda não se candidatou).
+      // Quem atende os requisitos de cada vaga aberta (e ainda não se candidatou). Antes de mostrar,
+      // a regra de localização filtra a lista: raio da vaga e distância máxima de cada profissional.
+      // Recepcionista: Renata (Jundiaí) e Paulo (Campinas) ficam fora do raio de 40 km; com poucos
+      // indicados, a empresa vê o aviso para ampliar o raio. Atendente: Beatriz está dentro do raio,
+      // mas mora além da distância que ela mesma aceita (10 km).
       indicados: {
         recepcionista: [
           { id: 'mariana-rocha', atende: 5 },
-          { id: 'paulo-andrade', atende: 4 },
-          { id: 'lucas-teixeira', atende: 5 }
+          { id: 'lucas-teixeira', atende: 5 },
+          { id: 'renata-campos', atende: 5 },
+          { id: 'paulo-andrade', atende: 4 }
         ],
         atendente: [
           { id: 'carla-mendes', atende: 5 },
           { id: 'rafael-lima', atende: 4 },
+          { id: 'camila-duarte', atende: 4 },
           { id: 'beatriz-nunes', atende: 4 }
         ]
       },
 
-      // Indicações para qualquer vaga publicada na demonstração.
+      // Indicações para qualquer vaga publicada na demonstração (também filtradas pela localização).
       indicadosPadrao: [
         { id: 'mariana-rocha', atende: 5 },
         { id: 'carla-mendes', atende: 5 },
-        { id: 'lucas-teixeira', atende: 4 }
+        { id: 'lucas-teixeira', atende: 4 },
+        { id: 'camila-duarte', atende: 4 },
+        { id: 'renata-campos', atende: 4 },
+        { id: 'paulo-andrade', atende: 4 },
+        { id: 'beatriz-nunes', atende: 3 },
+        { id: 'sofia-ramos', atende: 3 }
       ],
 
       // Avaliação cega do profissional. "ref" liga a pergunta a um campo do combinado, mostrado como referência.
@@ -188,11 +263,14 @@
 
     // Perfis dos profissionais (candidatos e indicados). A chave é o id usado nos links.
     // "canal" é o meio de contato preferido, usado quando o WhatsApp é liberado no chat (padrão: whatsapp).
+    // Localização (seção 6): "loc" (cidade e ponto aproximado), "distanciaMax" (em km, a distância
+    // máxima que a pessoa aceita até o trabalho), "aceitaMudar" e "modelos" de trabalho aceitos.
     profissionais: {
       'mariana-rocha': {
         nome: 'Mariana Rocha', iniciais: 'MR', cor: '#DCE6F7',
         resumo: 'Recepcionista · 4 anos de experiência',
-        local: 'São Paulo, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5890, -46.6340), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 20, aceitaMudar: false, modelos: ['presencial', 'hibrido'],
         nota: '4,8', trabalhos: 9, contrataria: '100%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Recepcionista', empresa: 'Clínica Bem Viver', periodo: '2024 – 2025' },
@@ -216,7 +294,8 @@
       'paulo-andrade': {
         nome: 'Paulo Andrade', iniciais: 'PA', cor: '#F3E6D6',
         resumo: 'Atendimento ao público · 6 anos',
-        local: 'Campinas, SP · Brasil', disponibilidade: 'Disponível em 15 dias',
+        loc: onde('Campinas', 'SP', 'Brasil', -22.9056, -47.0608), disponibilidade: 'Disponível em 15 dias',
+        distanciaMax: 30, aceitaMudar: false, modelos: ['presencial', 'hibrido'],
         nota: '4,7', trabalhos: 14, contrataria: '93%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Atendente de balcão', empresa: 'Loja Central', periodo: '2024 – 2025' },
@@ -239,7 +318,8 @@
       'lucas-teixeira': {
         nome: 'Lucas Teixeira', iniciais: 'LT', cor: '#E4E9F1',
         resumo: 'Recepcionista · 2 anos de experiência',
-        local: 'Guarulhos, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('Guarulhos', 'SP', 'Brasil', -23.4538, -46.5333), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 30, aceitaMudar: true, modelos: ['presencial', 'hibrido', 'remoto'],
         nota: null, trabalhos: 0, contrataria: null, verificado: false, novo: true,
         experienciaVerificada: [],
         experienciaDeclarada: [
@@ -254,7 +334,8 @@
       'carla-mendes': {
         nome: 'Carla Mendes', iniciais: 'CM', cor: '#E3F4EB',
         resumo: 'Vendas e atendimento · 3 anos',
-        local: 'São Paulo, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5407, -46.5760), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 15, aceitaMudar: false, modelos: ['presencial', 'hibrido'],
         nota: '4,9', trabalhos: 7, contrataria: '100%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Vendedora', empresa: 'Loja Central', periodo: '2024 – 2025' },
@@ -275,7 +356,8 @@
       'rafael-lima': {
         nome: 'Rafael Lima', iniciais: 'RL', cor: '#DCE6F7',
         resumo: 'Atendente de loja · 5 anos',
-        local: 'Osasco, SP · Brasil', disponibilidade: 'Disponível em 30 dias',
+        loc: onde('Osasco', 'SP', 'Brasil', -23.5325, -46.7917), disponibilidade: 'Disponível em 30 dias',
+        distanciaMax: 25, aceitaMudar: false, modelos: ['presencial'],
         nota: '4,6', trabalhos: 11, contrataria: '90%', verificado: true, canal: 'sms',
         experienciaVerificada: [
           { cargo: 'Atendente de loja', empresa: 'Grupo Horizonte', periodo: '2024 – 2025' },
@@ -296,7 +378,8 @@
       'beatriz-nunes': {
         nome: 'Beatriz Nunes', iniciais: 'BN', cor: '#F3E6D6',
         resumo: 'Primeiro emprego · curso de atendimento',
-        local: 'Santo André, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('Santo André', 'SP', 'Brasil', -23.6639, -46.5383), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 10, aceitaMudar: false, modelos: ['presencial', 'hibrido', 'remoto'],
         nota: null, trabalhos: 0, contrataria: null, verificado: false, novo: true,
         experienciaVerificada: [],
         experienciaDeclarada: [
@@ -311,7 +394,8 @@
       'joao-silva': {
         nome: 'João Silva', iniciais: 'JS', cor: '#DCE6F7',
         resumo: 'Recepcionista · 3 anos de experiência',
-        local: 'São Paulo, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5020, -46.6250), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 25, aceitaMudar: false, modelos: ['presencial', 'hibrido', 'remoto'],
         nota: '4,8', trabalhos: 6, contrataria: '100%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Atendente', empresa: 'Loja Central', periodo: '2025 – 2026' },
@@ -333,7 +417,8 @@
       'ana-souza': {
         nome: 'Ana Souza', iniciais: 'AS', cor: '#E3F4EB',
         resumo: 'Vendedora · 5 anos de experiência',
-        local: 'São Paulo, SP · Brasil', disponibilidade: 'Em contrato atual',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5600, -46.6800), disponibilidade: 'Em contrato atual',
+        distanciaMax: 20, aceitaMudar: false, modelos: ['presencial'],
         nota: '4,9', trabalhos: 8, contrataria: '100%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Vendedora', empresa: 'Empresa Exemplo', periodo: '2026 – atual' },
@@ -355,7 +440,8 @@
       'fernanda-costa': {
         nome: 'Fernanda Costa', iniciais: 'FC', cor: '#F3E6D6',
         resumo: 'Assistente administrativa · 3 anos',
-        local: 'São Bernardo do Campo, SP · Brasil', disponibilidade: 'Disponível em 15 dias',
+        loc: onde('São Bernardo do Campo', 'SP', 'Brasil', -23.6914, -46.5646), disponibilidade: 'Disponível em 15 dias',
+        distanciaMax: 25, aceitaMudar: false, modelos: ['presencial', 'hibrido', 'remoto'],
         nota: '4,5', trabalhos: 5, contrataria: '80%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Assistente administrativa', empresa: 'Grupo Horizonte', periodo: '2024 – 2025' },
@@ -376,7 +462,8 @@
       'diego-martins': {
         nome: 'Diego Martins', iniciais: 'DM', cor: '#E4E9F1',
         resumo: 'Auxiliar administrativo · 1 ano',
-        local: 'Diadema, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('Diadema', 'SP', 'Brasil', -23.6861, -46.6228), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 20, aceitaMudar: false, modelos: ['presencial', 'hibrido'],
         nota: null, trabalhos: 0, contrataria: null, verificado: false, novo: true,
         experienciaVerificada: [],
         experienciaDeclarada: [
@@ -391,7 +478,8 @@
       'juliana-alves': {
         nome: 'Juliana Alves', iniciais: 'JA', cor: '#E3F4EB',
         resumo: 'Atendimento e recepção · 2 anos',
-        local: 'São Paulo, SP · Brasil', disponibilidade: 'Disponível imediatamente',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.6200, -46.6600), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 15, aceitaMudar: true, modelos: ['presencial', 'hibrido', 'remoto'],
         nota: '4,4', trabalhos: 3, contrataria: '100%', verificado: true,
         experienciaVerificada: [
           { cargo: 'Atendente', empresa: 'Café Aurora', periodo: '2025' },
@@ -412,7 +500,8 @@
       'thiago-pereira': {
         nome: 'Thiago Pereira', iniciais: 'TP', cor: '#DCE6F7',
         resumo: 'Atendimento ao cliente · 1 ano',
-        local: 'Barueri, SP · Brasil', disponibilidade: 'Disponível em 30 dias',
+        loc: onde('Barueri', 'SP', 'Brasil', -23.5057, -46.8790), disponibilidade: 'Disponível em 30 dias',
+        distanciaMax: 30, aceitaMudar: false, modelos: ['presencial', 'remoto'],
         nota: null, trabalhos: 0, contrataria: null, verificado: false, novo: true,
         experienciaVerificada: [],
         experienciaDeclarada: [
@@ -422,6 +511,70 @@
         idiomas: ['Português · Nativo', 'Inglês · Básico'],
         formacao: ['Ensino médio · concluído'],
         avaliacoes: []
+      },
+
+      'renata-campos': {
+        nome: 'Renata Campos', iniciais: 'RC', cor: '#F3E6D6',
+        resumo: 'Recepcionista · 4 anos de experiência',
+        loc: onde('Jundiaí', 'SP', 'Brasil', -23.1857, -46.8978), disponibilidade: 'Disponível imediatamente',
+        distanciaMax: 60, aceitaMudar: false, modelos: ['presencial', 'hibrido'],
+        nota: '4,6', trabalhos: 5, contrataria: '100%', verificado: true,
+        experienciaVerificada: [
+          { cargo: 'Recepcionista', empresa: 'Clínica Bem Viver', periodo: '2024 – 2025' },
+          { cargo: 'Recepcionista', empresa: 'Grupo Horizonte', periodo: '2023 – 2024' }
+        ],
+        experienciaDeclarada: [
+          { cargo: 'Auxiliar de recepção', empresa: 'Hotel Serra Azul', periodo: '2021 – 2023' }
+        ],
+        competencias: ['Atendimento ao público', 'Agenda e telefonia', 'Pacote Office'],
+        idiomas: ['Português · Nativo', 'Inglês · Básico'],
+        formacao: ['Técnico em Secretariado · concluído'],
+        avaliacoes: [
+          { empresa: 'Clínica Bem Viver', quando: 'há 5 meses', nota: 5, respostas: resp('Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Organizada e muito atenciosa com os pacientes.' }
+        ]
+      },
+
+      'camila-duarte': {
+        nome: 'Camila Duarte', iniciais: 'CD', cor: '#E3F4EB',
+        resumo: 'Atendente de loja · 2 anos',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5580, -46.5990), disponibilidade: 'Disponível em 15 dias',
+        distanciaMax: 10, aceitaMudar: false, modelos: ['presencial'],
+        nota: '4,5', trabalhos: 3, contrataria: '100%', verificado: true,
+        experienciaVerificada: [
+          { cargo: 'Atendente de loja', empresa: 'Boutique Alameda', periodo: '2025 – 2026' }
+        ],
+        experienciaDeclarada: [
+          { cargo: 'Repositora', empresa: 'Mercado Bom Preço', periodo: '2023 – 2024' }
+        ],
+        competencias: ['Atendimento ao público', 'Vendas', 'Organização de estoque'],
+        idiomas: ['Português · Nativo'],
+        formacao: ['Ensino médio · concluído'],
+        avaliacoes: [
+          { empresa: 'Boutique Alameda', quando: 'há 2 meses', nota: 5, respostas: resp('Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Atenciosa e rápida no caixa.' }
+        ]
+      },
+
+      'sofia-ramos': {
+        nome: 'Sofia Ramos', iniciais: 'SR', cor: '#DCE6F7',
+        resumo: 'Atendimento bilíngue · 4 anos',
+        loc: onde('Lisboa', '', 'Portugal', 38.7223, -9.1393), disponibilidade: 'Disponível em 30 dias',
+        distanciaMax: 15, aceitaMudar: true, modelos: ['presencial', 'remoto'],
+        nota: '4,8', trabalhos: 6, contrataria: '100%', verificado: true,
+        experienciaVerificada: [
+          { cargo: 'Atendimento ao cliente', empresa: 'Nova Rota Serviços', periodo: '2024 – 2026' }
+        ],
+        experienciaDeclarada: [
+          { cargo: 'Rececionista', empresa: 'Hotel Tejo', periodo: '2021 – 2024' }
+        ],
+        competencias: ['Atendimento ao cliente', 'Suporte por chat', 'Comunicação', 'Sistemas de cadastro'],
+        idiomas: ['Português · Nativo', 'Inglês · Fluente', 'Espanhol · Intermediário'],
+        formacao: ['Licenciatura em Turismo · concluído'],
+        avaliacoes: [
+          { empresa: 'Nova Rota Serviços', quando: 'há 1 mês', nota: 5, respostas: resp('Sim', 'Sim', 'Sim', 'Sim'),
+            comentario: 'Resolve rápido e com muita clareza, em português e inglês.' }
+        ]
       }
     },
 
@@ -429,7 +582,7 @@
     // Empresa Exemplo usa a mesma reputação da jornada da empresa.
     empresas: {
       'empresa-exemplo': {
-        nome: 'Empresa Exemplo', iniciais: 'EE', setor: 'Comércio e serviços', local: 'São Paulo, SP · Brasil', verificada: true,
+        nome: 'Empresa Exemplo', iniciais: 'EE', setor: 'Comércio e serviços', loc: onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361), verificada: true,
         nota: REP_EXEMPLO.nota, contratacoes: REP_EXEMPLO.contratacoes, pagouConforme: REP_EXEMPLO.pagouConforme,
         correspondia: '94%', trabalhariaNovamente: '91%',
         avaliacoes: [
@@ -440,7 +593,7 @@
         ]
       },
       'loja-central': {
-        nome: 'Loja Central', iniciais: 'LC', setor: 'Varejo', local: 'São Paulo, SP · Brasil', verificada: true,
+        nome: 'Loja Central', iniciais: 'LC', setor: 'Varejo', loc: onde('São Paulo', 'SP', 'Brasil', -23.5670, -46.7020), verificada: true,
         nota: '4,6', contratacoes: 31, pagouConforme: '98%', correspondia: '95%', trabalhariaNovamente: '92%',
         avaliacoes: [
           { autor: 'Ana S.', quando: 'há 8 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
@@ -450,7 +603,7 @@
         ]
       },
       'grupo-horizonte': {
-        nome: 'Grupo Horizonte', iniciais: 'GH', setor: 'Serviços administrativos', local: 'São Paulo, SP · Brasil', verificada: true,
+        nome: 'Grupo Horizonte', iniciais: 'GH', setor: 'Serviços administrativos', loc: onde('São Paulo', 'SP', 'Brasil', -23.5614, -46.6559), verificada: true,
         nota: '4,7', contratacoes: 12, pagouConforme: '100%', correspondia: '96%', trabalhariaNovamente: '94%',
         avaliacoes: [
           { autor: 'Fernanda C.', quando: 'há 7 meses', nota: 5, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
@@ -458,7 +611,7 @@
         ]
       },
       'hotel-vista-mar': {
-        nome: 'Hotel Vista Mar', iniciais: 'HV', setor: 'Hotelaria', local: 'Santos, SP · Brasil', verificada: true,
+        nome: 'Hotel Vista Mar', iniciais: 'HV', setor: 'Hotelaria', loc: onde('Santos', 'SP', 'Brasil', -23.9608, -46.3336), verificada: true,
         nota: '4,5', contratacoes: 18, pagouConforme: '95%', correspondia: '90%', trabalhariaNovamente: '89%',
         avaliacoes: [
           { autor: 'Mariana R.', quando: 'há 1 ano', nota: 4, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Parcialmente'),
@@ -466,7 +619,7 @@
         ]
       },
       'cafe-aurora': {
-        nome: 'Café Aurora', iniciais: 'CA', setor: 'Alimentação', local: 'São Paulo, SP · Brasil', verificada: false,
+        nome: 'Café Aurora', iniciais: 'CA', setor: 'Alimentação', loc: onde('São Paulo', 'SP', 'Brasil', -23.5880, -46.6820), verificada: false,
         nota: '4,4', contratacoes: 9, pagouConforme: '93%', correspondia: '92%', trabalhariaNovamente: '88%',
         avaliacoes: [
           { autor: 'Juliana A.', quando: 'há 4 meses', nota: 4, respostas: respE('Sim', 'Sim', 'Sim', 'Sim', 'Sim'),
@@ -474,16 +627,22 @@
         ]
       },
       'nova-rota': {
-        nome: 'Nova Rota Serviços', iniciais: 'NR', setor: 'Atendimento e logística', local: 'Curitiba, PR · Brasil', verificada: false,
+        nome: 'Nova Rota Serviços', iniciais: 'NR', setor: 'Atendimento e logística', loc: onde('Curitiba', 'PR', 'Brasil', -25.4284, -49.2733), verificada: false,
+        novo: true, avaliacoes: []
+      },
+      'sunrise-hotels': {
+        nome: 'Sunrise Hotels', iniciais: 'SH', setor: 'Hotelaria', loc: onde('Miami', 'FL', 'Estados Unidos', 25.7743, -80.1937), verificada: false,
         novo: true, avaliacoes: []
       }
     },
 
     // Vagas abertas que o profissional pode ver. "atende" já considera o perfil do João Silva.
+    // Localização (seção 7): vagas presenciais e híbridas têm "loc" e "raio" de busca; remotas têm
+    // "loc: null" e, opcionalmente, o "fuso" da equipe.
     vagas: {
       'atendente-loja': {
         id: 'atendente-loja', titulo: 'Atendente de loja', empresa: 'loja-central',
-        local: 'São Paulo, SP · Brasil', modelo: 'Presencial', tipo: 'Tempo integral',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5670, -46.7020), raio: raio(40, 'km'), modelo: 'Presencial', tipo: 'Tempo integral',
         salario: { moeda: 'BRL', min: 2200, max: 2600, periodo: 'mes' }, posicoes: 2, publicadaEm: '2026-09-21',
         requisitos: [
           { texto: 'Atendimento ao público', atende: true },
@@ -498,7 +657,7 @@
       },
       'assistente-adm': {
         id: 'assistente-adm', titulo: 'Assistente administrativo', empresa: 'grupo-horizonte',
-        local: 'São Paulo, SP · Brasil', modelo: 'Híbrido', tipo: 'Meio período',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5614, -46.6559), raio: raio(40, 'km'), modelo: 'Híbrido', tipo: 'Meio período',
         salario: { moeda: 'BRL', min: 1800, max: 2200, periodo: 'mes' }, posicoes: 1, publicadaEm: '2026-09-18',
         requisitos: [
           { texto: 'Pacote Office', atende: true },
@@ -515,7 +674,7 @@
       },
       'suporte-cliente': {
         id: 'suporte-cliente', titulo: 'Suporte ao cliente', empresa: 'nova-rota',
-        local: 'Remoto', modelo: 'Remoto', tipo: 'Tempo integral',
+        loc: null, fuso: -3, modelo: 'Remoto', tipo: 'Tempo integral',
         salario: { moeda: 'BRL', min: 2500, max: 3000, periodo: 'mes' }, posicoes: 3, publicadaEm: '2026-09-25',
         requisitos: [
           { texto: 'Atendimento ao cliente', atende: true },
@@ -530,7 +689,7 @@
       },
       'recepcionista-exemplo': {
         id: 'recepcionista-exemplo', titulo: 'Recepcionista', empresa: 'empresa-exemplo',
-        local: 'São Paulo, SP · Brasil', modelo: 'Presencial', tipo: 'Tempo integral',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361), raio: raio(40, 'km'), modelo: 'Presencial', tipo: 'Tempo integral',
         salario: { moeda: 'BRL', min: 2000, max: 2400, periodo: 'mes' }, posicoes: 1, publicadaEm: '2026-08-28',
         requisitos: [
           { texto: 'Atendimento ao público', atende: true },
@@ -549,7 +708,7 @@
       },
       'atendente-exemplo': {
         id: 'atendente-exemplo', titulo: 'Atendente de loja', empresa: 'empresa-exemplo',
-        local: 'São Paulo, SP · Brasil', modelo: 'Presencial', tipo: 'Tempo integral',
+        loc: onde('São Paulo', 'SP', 'Brasil', -23.5475, -46.6361), raio: raio(40, 'km'), modelo: 'Presencial', tipo: 'Tempo integral',
         salario: { moeda: 'BRL', min: 1900, max: 2300, periodo: 'mes' }, posicoes: 2, publicadaEm: '2026-09-10',
         requisitos: [
           { texto: 'Atendimento ao público', atende: true },
@@ -563,6 +722,49 @@
         perguntasTriagem: [
           { texto: 'Tem disponibilidade para trabalhar aos sábados?', tipo: 'simnao' }
         ]
+      },
+      'recepcao-santos': {
+        id: 'recepcao-santos', titulo: 'Recepcionista de hotel', empresa: 'hotel-vista-mar',
+        loc: onde('Santos', 'SP', 'Brasil', -23.9608, -46.3336), raio: raio(100, 'km'), modelo: 'Presencial', tipo: 'Tempo integral',
+        salario: { moeda: 'BRL', min: 2300, max: 2700, periodo: 'mes' }, posicoes: 2, publicadaEm: '2026-09-24',
+        requisitos: [
+          { texto: 'Atendimento ao público', atende: true },
+          { texto: 'Experiência em recepção', atende: true },
+          { texto: 'Pacote Office', atende: true },
+          { texto: 'Inglês intermediário', atende: true },
+          { texto: 'Disponibilidade para escala 12x36', atende: true }
+        ],
+        descricao: 'Check-in e check-out de hóspedes, reservas por telefone e apoio ao concierge. O hotel oferece transporte fretado a partir de São Paulo.',
+        competencias: ['Atendimento ao público', 'Agenda e telefonia', 'Pacote Office'],
+        idiomas: ['Português · Nativo', 'Inglês · Intermediário']
+      },
+      'front-desk-miami': {
+        id: 'front-desk-miami', titulo: 'Recepcionista (front desk)', empresa: 'sunrise-hotels',
+        loc: onde('Miami', 'FL', 'Estados Unidos', 25.7743, -80.1937), raio: raio(25, 'mi'), modelo: 'Presencial', tipo: 'Tempo integral',
+        salario: { moeda: 'USD', min: 17, max: 20, periodo: 'hora' }, posicoes: 2, publicadaEm: '2026-09-22',
+        requisitos: [
+          { texto: 'Atendimento ao público', atende: true },
+          { texto: 'Experiência em recepção', atende: true },
+          { texto: 'Inglês avançado', atende: false },
+          { texto: 'Espanhol intermediário', atende: false }
+        ],
+        descricao: 'Recepção de hóspedes em hotel de Miami Beach, com atendimento em inglês e espanhol.',
+        competencias: ['Atendimento ao público', 'Reservas'],
+        idiomas: ['Inglês · Avançado', 'Espanhol · Intermediário']
+      },
+      'atendimento-bilingue': {
+        id: 'atendimento-bilingue', titulo: 'Atendimento bilíngue (remoto)', empresa: 'sunrise-hotels',
+        loc: null, fuso: -5, modelo: 'Remoto', tipo: 'Meio período',
+        salario: { moeda: 'USD', min: 16, max: 18, periodo: 'hora' }, posicoes: 3, publicadaEm: '2026-09-26',
+        requisitos: [
+          { texto: 'Atendimento ao cliente', atende: true },
+          { texto: 'Comunicação clara', atende: true },
+          { texto: 'Inglês fluente', atende: false },
+          { texto: 'Português nativo', atende: true }
+        ],
+        descricao: 'Reservas e dúvidas de hóspedes brasileiros por chat e telefone, no horário da equipe de Miami.',
+        competencias: ['Atendimento ao cliente', 'Reservas', 'Comunicação'],
+        idiomas: ['Português · Nativo', 'Inglês · Fluente']
       }
     },
 
@@ -614,7 +816,9 @@
       // Avaliação cega pendente (vínculo anterior)
       avaliacao: { empresa: 'loja-central', prazoDias: 3, combinado: combinado('Atendente', 'Tempo integral', 'BRL', 'mes', 1900, '2025-01-15', 'Seg a sex, 8h às 17h') },
 
-      vagasIndicadas: ['atendente-loja', 'assistente-adm', 'suporte-cliente'],
+      // Vagas que combinam com o perfil. Antes de mostrar, a regra de localização filtra a lista:
+      // "Recepcionista de hotel" (Santos, ~60 km) fica de fora com a distância máxima padrão do João (25 km).
+      vagasIndicadas: ['atendente-loja', 'assistente-adm', 'suporte-cliente', 'recepcao-santos'],
 
       // Candidaturas anteriores. "confirmar": a candidatura acompanha a contratação em andamento (Recepcionista);
       // "avaliar": contratado e confirmado, com avaliação da empresa pendente.
@@ -654,4 +858,15 @@
       ]
     }
   };
+
+  // "local" é o texto mostrado nas telas, montado a partir de "loc" (vagas remotas: "Remoto").
+  function localTexto(l) {
+    return l.cidade + (l.estado ? ', ' + l.estado : '') + ' · ' + l.pais;
+  }
+  [M.profissionais, M.empresas, M.vagas].forEach(function (grupo) {
+    Object.keys(grupo).forEach(function (k) {
+      var x = grupo[k];
+      x.local = x.loc ? localTexto(x.loc) : 'Remoto';
+    });
+  });
 })();

@@ -20,6 +20,7 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `avaliar-empresa.html?id=ID` | Profissional: avaliação cega da empresa |
 | `mensagens.html?como=empresa\|profissional` | As duas jornadas: lista de conversas |
 | `conversa.html?id=ID&como=empresa\|profissional` | As duas jornadas: chat de uma conversa |
+| `buscar.html?como=empresa\|profissional` | Busca com filtros de localização opcionais (empresa busca profissionais; profissional busca vagas) |
 
 Interações simuladas:
 
@@ -61,9 +62,21 @@ A candidatura completa (perguntas de triagem, pretensão salarial e currículo):
 - **Currículo em PDF (opcional):** só aceita PDF de até 5 MB, com nome e tamanho mostrados e opção de remover. O arquivo em si nunca é enviado nem salvo — nem no `sessionStorage` —, só o nome e o tamanho. Para a empresa, "Ver currículo" mostra o aviso de protótipo. Rafael Lima (candidato de Recepcionista) já vem com um currículo anexado no mock, para demonstrar.
 - **O que a empresa recebe:** `candidatos.html` e `perfil-profissional.html` (quando aberto a partir de uma candidatura) mostram um bloco "Candidatura" com a mensagem do candidato, as respostas de triagem, a pretensão salarial (com a indicação de faixa) e o currículo, quando houver.
 
+Localização (documento v0.2, seções 6, 7, 10 e 10.1):
+
+- **Indicações só nos arredores:** em vagas presenciais e híbridas, a empresa só recebe indicados que estão dentro do raio da vaga **e** dentro da distância máxima que a própria pessoa aceita. Quem fica de fora é só contado ("2 fora do raio da vaga · 1 mora além da distância que aceita"), sem nomes. A mesma regra filtra as vagas indicadas ao profissional.
+- **Raio padrão:** 25 milhas nos Estados Unidos e 40 km nos demais países. Em `publicar-vaga.html`, o campo "Raio de busca" já vem com o padrão do país escolhido (e muda de unidade junto com ele).
+- **Aviso para ampliar o raio:** com menos de 3 indicados, a empresa vê "Poucos profissionais nos arredores" com o menor raio que traria mais gente ("Com 60 km, entra mais 1 profissional"). Na Recepcionista, isso acontece logo de início: ampliar para 60 km traz a Renata Campos (Jundiaí). Se ampliar não ajudaria (quem ficou de fora mora além da distância que aceita), o aviso diz isso e não oferece o botão. O raio ampliado fica guardado na sessão.
+- **Vagas remotas:** não usam distância. Entra quem aceita trabalho remoto e, se a empresa definir o fuso da equipe, quem está a até 3 h dele.
+- **Distância aproximada, sem endereço:** as telas mostram só a cidade e a distância arredondada ("≈ 15 km da vaga"). Cada perfil, empresa e vaga guarda apenas o centro aproximado do bairro ou da cidade.
+- **Linha reta no MVP:** a distância é calculada em linha reta (fórmula de haversine), sem rota.
+- **Perfil do profissional (seção 6):** distância máxima que aceita, se aceita se mudar, modelos de trabalho aceitos e fuso horário, na seção "Localização e preferências" de `perfil-profissional.html`. O João Silva pode mudar a distância máxima dele em "Vagas indicadas para você" (tela inicial): com 60 km, a vaga de Recepcionista de hotel em Santos passa a aparecer.
+- **Busca (seções 10 e 10.1):** a localização é um filtro opcional, desligado por padrão e controlado por quem pesquisa: distância (a partir da sede da empresa ou da região do profissional), país, estado, cidade, modelo de trabalho, disposto a se mudar (só na busca da empresa) e fuso horário. Na busca de vagas, as remotas aparecem com qualquer distância.
+- **Cidades conhecidas:** `mock-data.js` traz uma lista de cidades com o ponto aproximado (em `localizacao.cidades`). Ao publicar uma vaga numa cidade fora da lista, ela é publicada normalmente, mas as indicações não são filtradas por distância (a tela avisa).
+
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (41 passos, ~165 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (49 passos, ~208 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -86,6 +99,7 @@ publicar-vaga.html, candidatos.html, perfil-profissional.html,
 preencher-vaga.html, avaliar-profissional.html
 vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
 mensagens.html, conversa.html
+buscar.html               busca com filtros de localização (as duas jornadas)
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
@@ -112,4 +126,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260928-8`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260930-1`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.

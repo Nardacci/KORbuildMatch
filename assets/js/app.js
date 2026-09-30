@@ -187,6 +187,7 @@
     s.status = s.status || {};           // "vagaId:profId" -> status do candidato
     s.convites = s.convites || {};       // "vagaId:profId" -> true
     s.avaliados = s.avaliados || {};     // profId -> avaliação enviada
+    s.raios = s.raios || {};             // vagaId -> raio ampliado pela empresa ({ valor, unidade })
     return s;
   }
 
@@ -206,6 +207,7 @@
     s.seguindo = s.seguindo || {};         // empresaId -> true
     s.confirmacao = s.confirmacao || null; // null | 'confirmado' | 'contestado' (contratação em Recepcionista, na Empresa Exemplo)
     s.contestacaoTexto = s.contestacaoTexto || ''; // o que mudou, quando contestado
+    s.distanciaMax = s.distanciaMax || null; // km; null = a do perfil em mock-data.js
     return s;
   }
 
@@ -357,6 +359,129 @@
   function nota(n) { return parseFloat(String(n).replace(',', '.')); }
   function q(v) { return encodeURIComponent(v); }
 
+  /* ---------- Localização (documento v0.2, seções 6, 7, 10 e 10.1) ---------- */
+
+  function LOC() { return window.MOCK.localizacao; }
+  var KM_POR_MILHA = 1.609344;
+
+  function unidadeDoPais(pais) { return LOC().paisesEmMilhas.indexOf(pais) !== -1 ? 'mi' : 'km'; }
+  function raioPadrao(pais) { var u = unidadeDoPais(pais); return { valor: LOC().raioPadrao[u], unidade: u }; }
+  function raioKm(r) { return r.unidade === 'mi' ? r.valor * KM_POR_MILHA : r.valor; }
+  function raioTexto(r) { return r.valor + ' ' + (r.unidade === 'mi' ? 'milhas' : 'km'); }
+  function cidadeCurta(loc) { return loc.cidade + (loc.estado ? ', ' + loc.estado : ''); }
+  function semAcento(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+
+  function fusoDe(loc) { return loc ? LOC().fusoPorPais[loc.pais] : null; }
+  function fusoRotulo(id) {
+    var f = LOC().fusos.filter(function (x) { return x.id === id; })[0];
+    return f ? f.rotulo : 'UTC' + (id < 0 ? '−' + (-id) : '+' + id);
+  }
+  function fusoCurto(id) { return fusoRotulo(id).split(' · ')[0]; }
+
+  // Distância em linha reta entre dois pontos (fórmula de haversine), em km. No MVP não há rota.
+  function distanciaKm(a, b) {
+    var rad = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  }
+
+  // Distância aproximada, para não expor o endereço: arredondada (1 em 1 até 10, de 5 em 5 até 100,
+  // de 10 em 10 depois) e sempre com "≈".
+  function distTexto(km, unidade) {
+    var u = unidade === 'mi' ? 'mi' : 'km';
+    var v = u === 'mi' ? km / KM_POR_MILHA : km;
+    if (v < 1) return 'menos de 1 ' + u;
+    var r = v < 10 ? Math.round(v) : (v < 100 ? Math.round(v / 5) * 5 : Math.round(v / 10) * 10);
+    return '≈ ' + r.toLocaleString('pt-BR') + ' ' + u;
+  }
+
+  function modeloId(rotuloOuId) {
+    var m = E().formulario.modelos.filter(function (x) { return x.id === rotuloOuId || x.rotulo === rotuloOuId; })[0];
+    return m ? m.id : '';
+  }
+  function modeloRotulo(id) { return E().formulario.modelos.filter(function (x) { return x.id === id; })[0].rotulo; }
+
+  // Cidade digitada ao publicar uma vaga -> ponto aproximado conhecido pelo protótipo (ou null).
+  function acharCidade(cidade, pais, estado) {
+    var c = LOC().cidades.filter(function (x) { return x.pais === pais && semAcento(x.cidade) === semAcento(cidade); })[0];
+    return c ? { cidade: c.cidade, estado: estado || c.estado, pais: c.pais, lat: c.lat, lng: c.lng } : null;
+  }
+
+  // Localização do perfil do profissional (seção 6). A distância máxima do João pode ser
+  // alterada na demonstração (tela inicial do profissional).
+  function perfilLocal(id) {
+    var p = prof(id);
+    var max = p.distanciaMax;
+    if (id === PR_ID && loadP().distanciaMax) max = loadP().distanciaMax;
+    return { loc: p.loc, distanciaMax: max, aceitaMudar: !!p.aceitaMudar, modelos: p.modelos || ['presencial'], fuso: fusoDe(p.loc) };
+  }
+
+  // A distância máxima na unidade do país da pessoa (o perfil guarda em km).
+  function distMaxTexto(pl) {
+    var u = unidadeDoPais(pl.loc.pais);
+    return 'até ' + (u === 'mi' ? Math.round(pl.distanciaMax / KM_POR_MILHA) + ' milhas' : pl.distanciaMax + ' km');
+  }
+
+  // Localização de uma vaga do catálogo do profissional: { modelo, loc, raio, fuso }.
+  function localVagaJob(v) {
+    return {
+      modelo: modeloId(v.modelo), loc: v.loc || null,
+      raio: v.raio || (v.loc ? raioPadrao(v.loc.pais) : null),
+      fuso: v.fuso != null ? v.fuso : null
+    };
+  }
+
+  // Localização de uma vaga da Empresa Exemplo (publicada na demonstração ou ligada ao catálogo),
+  // já com o raio ampliado pela empresa, se houver. Devolve null quando a vaga não tem localização.
+  function localVagaEmpresa(s, v) {
+    var base;
+    if (v.dados) {
+      base = { modelo: v.dados.modelo, loc: v.dados.loc || null, raio: v.dados.raio || null, fuso: v.dados.fuso != null ? v.dados.fuso : null };
+    } else if (window.MOCK.vagaLink[v.id]) {
+      base = localVagaJob(vagaJob(window.MOCK.vagaLink[v.id]));
+    } else {
+      return null;
+    }
+    if (base.loc && s.raios[v.id]) base.raio = s.raios[v.id];
+    return base;
+  }
+
+  // Regra das indicações (seção 10.1).
+  // Presencial e híbrida: a pessoa precisa estar dentro do raio da vaga E dentro da distância máxima
+  // que ela mesma aceita. Remota: não usa distância; entra quem aceita trabalho remoto e, se a vaga
+  // definir um fuso, quem está a até N horas dele. Sem ponto conhecido, não filtra.
+  // Devolve { ok, km (ou null), motivo: null | 'raio' | 'limite' | 'remoto' | 'fuso' }.
+  function regraLocal(vl, pl, raioOutro) {
+    if (!vl) return { ok: true, km: null, motivo: null };
+    if (vl.modelo === 'remoto') {
+      if (pl.modelos.indexOf('remoto') === -1) return { ok: false, km: null, motivo: 'remoto' };
+      if (vl.fuso != null && pl.fuso != null && Math.abs(vl.fuso - pl.fuso) > LOC().toleranciaFusoHoras) return { ok: false, km: null, motivo: 'fuso' };
+      return { ok: true, km: null, motivo: null };
+    }
+    if (!vl.loc || !pl.loc) return { ok: true, km: null, motivo: null };
+    var km = distanciaKm(vl.loc, pl.loc);
+    if (km > raioKm(raioOutro || vl.raio)) return { ok: false, km: km, motivo: 'raio' };
+    if (km > pl.distanciaMax) return { ok: false, km: km, motivo: 'limite' };
+    return { ok: true, km: km, motivo: null };
+  }
+
+  var MOTIVO_FORA = {
+    raio: ['fora do raio da vaga', 'fora do raio da vaga'],
+    limite: ['mora além da distância que aceita', 'moram além da distância que aceitam'],
+    remoto: ['não aceita trabalho remoto', 'não aceitam trabalho remoto'],
+    fuso: ['está em fuso incompatível', 'estão em fuso incompatível']
+  };
+
+  // "2 fora do raio da vaga · 1 mora além da distância que aceita"
+  function foraResumo(fora) {
+    return Object.keys(MOTIVO_FORA).map(function (m) {
+      var n = fora.filter(function (f) { return f.motivo === m; }).length;
+      return n ? n + ' ' + MOTIVO_FORA[m][n === 1 ? 0 : 1] : '';
+    }).filter(Boolean).join(' · ');
+  }
+
   // A contratação que o João Silva confirma (jornada do profissional) é a mesma que a empresa marca.
   // Devolve null | 'confirmado' | 'contestado' | 'recusado' para a vaga da confirmação; null para as demais vagas.
   function confirmacaoDaVaga(vagaId) {
@@ -505,6 +630,68 @@
     return E().indicados[v.id] || (v.publicada ? E().indicadosPadrao : null);
   }
 
+  // Indicados de uma vaga já filtrados pela regra de localização, com quem ficou de fora e, quando
+  // há poucos (menos que "minimoIndicados"), o menor raio que traria mais gente (aviso para ampliar).
+  function indicacoesDe(s, v) {
+    var vl = localVagaEmpresa(s, v);
+    var dentro = [], fora = [];
+    (indicadosDe(s, v) || []).forEach(function (i) {
+      var r = regraLocal(vl, perfilLocal(i.id));
+      (r.ok ? dentro : fora).push({ id: i.id, atende: i.atende, km: r.km, motivo: r.motivo });
+    });
+    var sugestao = null;
+    if (vl && vl.loc && vl.modelo !== 'remoto' && dentro.length < LOC().minimoIndicados) {
+      LOC().raios[vl.raio.unidade].some(function (valor) {
+        var r = { valor: valor, unidade: vl.raio.unidade };
+        if (raioKm(r) <= raioKm(vl.raio)) return false;
+        var ganho = fora.filter(function (f) { return f.motivo === 'raio' && regraLocal(vl, perfilLocal(f.id), r).ok; }).length;
+        if (ganho) sugestao = { raio: r, ganho: ganho };
+        return ganho > 0;
+      });
+    }
+    return { vl: vl, dentro: dentro, fora: fora, sugestao: sugestao };
+  }
+
+  // Cidade do profissional e distância aproximada até a vaga (sem endereço), para os cards da empresa.
+  function localProfTexto(id, vl) {
+    var pl = perfilLocal(id);
+    var mesmoPais = vl && vl.loc ? vl.loc.pais === pl.loc.pais : pl.loc.pais === E().loc.pais;
+    var t = cidadeCurta(pl.loc) + (mesmoPais ? '' : ' · ' + pl.loc.pais);
+    if (vl && vl.loc && vl.modelo !== 'remoto') t += ' · ' + distTexto(distanciaKm(vl.loc, pl.loc), unidadeDoPais(vl.loc.pais)) + ' da vaga';
+    return t;
+  }
+
+  // Texto e aviso sobre a localização das indicações de uma vaga (tela inicial da empresa).
+  function indLocalHtml(ind) {
+    var vl = ind.vl, html;
+    if (!vl) return '';
+    if (vl.modelo === 'remoto') {
+      html = 'Vaga remota: sem limite de distância. Indicamos quem aceita trabalho remoto' +
+        (vl.fuso != null ? ' e está a até ' + LOC().toleranciaFusoHoras + ' h do fuso da vaga (' + fusoCurto(vl.fuso) + ')' : '') + '.';
+    } else if (!vl.loc) {
+      html = 'Não localizamos a cidade da vaga no protótipo, então as indicações não foram filtradas por distância.';
+    } else {
+      html = 'Moram a até ' + raioTexto(vl.raio) + ' da vaga (' + cidadeCurta(vl.loc) + ') e aceitam essa distância. Distância aproximada, em linha reta; o endereço de ninguém é mostrado.';
+    }
+    var out = '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span id="ind-regra">' + esc(html) + '</span></p>';
+    if (ind.fora.length) {
+      out += '<p class="row-sub note-indent" id="ind-fora">Não aparecem: ' + esc(foraResumo(ind.fora)) + '.</p>';
+    }
+    if (!ind.sugestao && vl.loc && vl.modelo !== 'remoto' && ind.dentro.length < LOC().minimoIndicados) {
+      out += '<p class="row-sub note-indent" id="ind-poucos">Poucos profissionais nos arredores. Ampliar o raio não traria mais ninguém agora.</p>';
+    }
+    if (ind.sugestao) {
+      var sg = ind.sugestao;
+      out += '<div class="card card-warn" id="ind-aviso"><div class="media"><div class="icon-tile amber">' + icon('users', 22) + '</div>' +
+        '<div class="row-main"><div class="row-title">Poucos profissionais nos arredores</div>' +
+        '<div class="row-sub">' + (ind.dentro.length ? 'Só ' + plural(ind.dentro.length, 'profissional', 'profissionais') : 'Nenhum profissional') +
+          ' dentro de ' + esc(raioTexto(vl.raio)) + '. Com ' + esc(raioTexto(sg.raio)) + ', ' +
+          (sg.ganho === 1 ? 'entra mais 1 profissional.' : 'entram mais ' + sg.ganho + ' profissionais.') + '</div></div></div>' +
+        '<button type="button" class="btn btn-primary" data-ampliar="' + sg.raio.valor + '" data-unidade="' + sg.raio.unidade + '">Ampliar raio para ' + esc(raioTexto(sg.raio)) + '</button></div>';
+    }
+    return out;
+  }
+
   // Compatibilidade primeiro, reputação depois (quem é novo na plataforma fica atrás).
   function ordenar(list) {
     return list.slice().sort(function (a, b) {
@@ -600,12 +787,14 @@
 
   // Cartão de profissional (indicados na tela inicial e candidatos). "candBlock" é o bloco
   // "Candidatura" (mensagem, triagem, pretensão, currículo), quando a pessoa já é candidata.
-  function profCard(id, atende, de, actions, extra, candBlock) {
+  // "localTxt": cidade e distância aproximada até a vaga (ver localProfTexto).
+  function profCard(id, atende, de, actions, extra, candBlock, localTxt) {
     var p = prof(id);
     return '<article class="card' + (p.novo ? ' card-new' : '') + '">' +
       '<div class="media center"><div class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
       '<div class="row-main"><div class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</div>' +
-      '<div class="row-sub">' + esc(p.resumo) + '</div></div></div>' +
+      '<div class="row-sub">' + esc(p.resumo) + '</div>' +
+      (localTxt ? '<div class="row-sub loc-line">' + esc(localTxt) + '</div>' : '') + '</div></div>' +
       '<div class="chips"><span class="chip green">Atende ' + atende + ' de ' + de + ' requisitos</span>' + reputacaoChip(p) + (extra || '') + '</div>' +
       (candBlock ? '<div class="cand-block">' + candBlock + '</div>' : '') +
       actions + '</article>';
@@ -875,21 +1064,26 @@
 
     function indSummary() {
       var v = vagas.filter(function (x) { return x.id === selecionada; })[0];
-      return v ? indicadosDe(s, v).length + ' para ' + v.titulo : 'Nenhum profissional indicado';
+      return v ? indicacoesDe(s, v).dentro.length + ' para ' + v.titulo : 'Nenhum profissional indicado';
     }
 
     $('#content').innerHTML =
-      '<div class="greeting-row"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
+      '<div class="visually-hidden" role="status" id="live"></div>' +
+      '<div class="stack"><div class="greeting-row"><div class="greeting"><h1>Bom dia, ' + esc(d.nome) + '</h1>' +
         '<p>' + (itens === 0 ? 'Nenhum item precisa da sua atenção hoje.' : (itens === 1 ? '1 item precisa' : itens + ' itens precisam') + ' da sua atenção hoje.') + '</p></div>' +
         '<a href="publicar-vaga.html" class="btn btn-primary">' + icon('plus', 16, { stroke: 2.2 }) + 'Publicar nova vaga</a></div>' +
+        // Mesmo campo de busca da tela inicial do profissional.
+        '<a href="buscar.html?como=empresa" class="row-link" id="busca-empresa" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px">' +
+          '<span style="color:var(--ink)">' + icon('search', 20, { stroke: 2 }) + '</span>Buscar profissionais ou cargos</a></div>' +
 
       '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pend + '</section>' +
 
       accordion('acc-ind', 'Profissionais indicados', indSummary(),
         '<div class="filter" role="group" aria-label="Escolha a vaga" id="ind-filter"></div>' +
         '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Atendem os requisitos da vaga e têm reputação no mesmo nível da sua empresa.</span></p>' +
+        '<div id="ind-local"></div>' +
         '<div class="section" id="ind-list" aria-live="polite"></div>' +
-        accMore('Ver todos')) +
+        '<div class="acc-more"><a href="buscar.html?como=empresa">Buscar outros profissionais</a></div>') +
 
       accordion('acc-rep', 'Reputação da empresa', 'Nota ' + rep.nota + ' · ' + plural(rep.contratacoes, 'contratação', 'contratações'),
         (d.verificada ? '<span class="rep-badge">' + icon('check', 14, { stroke: 2.5 }) + 'Empresa verificada</span>' : '') +
@@ -903,21 +1097,34 @@
       $('#acc-ind-sum').textContent = indSummary();
 
       $('#ind-filter').innerHTML = abertas.map(function (v) {
-        var n = indicadosDe(s, v).length;
+        var n = indicacoesDe(s, v).dentro.length;
         return '<button type="button" data-vaga="' + esc(v.id) + '" aria-pressed="' + (v.id === selecionada) + '">' + esc(v.titulo) + ' · ' + n + '</button>';
       }).join('');
 
       var v = vagaPorId(s, selecionada);
-      $('#ind-list').innerHTML = (indicadosDe(s, v) || []).map(function (i) {
+      var ind = indicacoesDe(s, v);
+      $('#ind-local').innerHTML = indLocalHtml(ind);
+      $('#ind-list').innerHTML = ind.dentro.length ? ind.dentro.map(function (i) {
         return profCard(i.id, i.atende, requisitosDe(v),
           '<div class="btn-row"><button type="button" class="btn btn-primary" data-convidar="' + esc(i.id) + '" data-cv-vaga="' + esc(v.id) + '">Convidar para a vaga</button>' +
-          '<a href="' + esc(perfilHref(i.id, v.id)) + '" class="btn btn-outline">Ver perfil</a></div>');
-      }).join('');
+          '<a href="' + esc(perfilHref(i.id, v.id)) + '" class="btn btn-outline">Ver perfil</a></div>', '', '', localProfTexto(i.id, ind.vl));
+      }).join('') : '<div class="empty"><p class="row-title">Nenhum profissional indicado nos arredores.</p></div>';
     }
 
     $('#content').addEventListener('click', function (e) {
       var b = e.target.closest('[data-vaga]');
       if (b) { selecionada = b.getAttribute('data-vaga'); renderIndicados(); return; }
+      var amp = e.target.closest('[data-ampliar]');
+      if (amp) {
+        var r = { valor: Number(amp.getAttribute('data-ampliar')), unidade: amp.getAttribute('data-unidade') };
+        var st = load();
+        st.raios[selecionada] = r;
+        save(st);
+        s = st;
+        renderIndicados();
+        say('Raio ampliado para ' + raioTexto(r) + '.');
+        return;
+      }
       var cv = e.target.closest('[data-convidar]');
       if (cv) {
         var candId = cv.getAttribute('data-convidar'), vagaIdCtx = cv.getAttribute('data-cv-vaga');
@@ -981,9 +1188,16 @@
       '<div id="loc-fields" class="form-block">' +
         field('pais', 'País', 'select', '', options(f.paises, 'Selecione'), { req: true }) +
         field('estado', 'Estado ou região', 'input', 'type="text" maxlength="60" autocomplete="off" placeholder="Ex.: São Paulo"', '') +
-        field('cidade', 'Cidade', 'input', 'type="text" maxlength="60" autocomplete="off" placeholder="Ex.: São Paulo"', '', { req: true }) +
+        field('cidade', 'Cidade', 'input', 'type="text" maxlength="60" autocomplete="off" list="cidades-lista" placeholder="Ex.: São Paulo"', '', { req: true }) +
+        '<datalist id="cidades-lista"></datalist>' +
+        field('raio', 'Raio de busca', 'select', '', '', {
+          hint: 'Indicamos só quem mora até essa distância da vaga (em linha reta) e aceita essa distância. Padrão: 25 milhas nos Estados Unidos e 40 km nos demais países.' }) +
       '</div>' +
-      '<p id="loc-remoto" class="note" hidden>' + icon('check', 16, { stroke: 2.4 }) + '<span>Vaga remota: não é preciso informar país, estado nem cidade.</span></p>' +
+      '<div id="loc-remoto" class="form-block" hidden>' +
+        '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Vaga remota: não é preciso informar país, estado nem cidade, e não há raio de distância.</span></p>' +
+        field('fuso', 'Fuso horário da equipe (opcional)', 'select', '', options(LOC().fusos, 'Qualquer fuso'), {
+          hint: 'Se escolher um fuso, indicamos quem está a até ' + LOC().toleranciaFusoHoras + ' h de diferença dele.' }) +
+      '</div>' +
 
       field('tipo', 'Tipo de contratação', 'select', '', options(f.tipos, 'Selecione'), { req: true }) +
 
@@ -1108,6 +1322,22 @@
       $(kind === 'competencias' ? '#competencias-in' : '#idioma-sel').focus();
     });
 
+    // Raio de busca na unidade do país (milhas nos EUA, km nos demais), já no valor padrão,
+    // e sugestões de cidades conhecidas pelo protótipo.
+    function atualizarPais() {
+      var pais = val('pais');
+      var padrao = raioPadrao(pais);
+      $('#raio').innerHTML = LOC().raios[padrao.unidade].map(function (n) {
+        var r = { valor: n, unidade: padrao.unidade };
+        return '<option value="' + n + '"' + (n === padrao.valor ? ' selected' : '') + '>' + esc(raioTexto(r)) + (n === padrao.valor ? ' (padrão)' : '') + '</option>';
+      }).join('');
+      $('#cidades-lista').innerHTML = LOC().cidades.filter(function (c) { return !pais || c.pais === pais; }).map(function (c) {
+        return '<option value="' + esc(c.cidade) + '"></option>';
+      }).join('');
+    }
+    atualizarPais();
+    $('#pais').addEventListener('change', atualizarPais);
+
     // Vaga remota não precisa de localização.
     form.addEventListener('change', function (e) {
       if (e.target.name !== 'modelo') return;
@@ -1154,6 +1384,8 @@
       $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
       if (!ok) return;
 
+      var pais = val('pais');
+      var loc = remoto ? null : acharCidade(val('cidade'), pais, val('estado'));
       var s = load();
       var v = {
         id: 'vaga-' + Date.now().toString(36),
@@ -1165,7 +1397,11 @@
         dados: {
           descricao: val('descricao'),
           modelo: modelo(),
-          local: remoto ? 'Remoto' : [val('cidade'), val('estado'), val('pais')].filter(Boolean).join(', '),
+          local: remoto ? 'Remoto' : [loc ? loc.cidade : val('cidade'), val('estado'), pais].filter(Boolean).join(', '),
+          // Ponto aproximado da cidade (null se o protótipo não a conhece) e raio de busca (seção 7).
+          loc: loc,
+          raio: remoto ? null : { valor: Number($('#raio').value), unidade: unidadeDoPais(pais) },
+          fuso: remoto && $('#fuso').value !== '' ? Number($('#fuso').value) : null,
           tipo: val('tipo'),
           salario: salarioTexto(val('moeda') || $('#moeda').value, $('#periodo').value, min, max),
           competencias: lista.competencias.slice(),
@@ -1195,6 +1431,8 @@
     var modelo = E().formulario.modelos.filter(function (m) { return m.id === d.modelo; })[0].rotulo;
     var resumo = '<dl class="summary">' +
       '<div><dt>Local</dt><dd>' + esc(d.local) + '</dd></div>' +
+      (d.raio ? '<div><dt>Raio de busca</dt><dd>' + esc(raioTexto(d.raio)) + '</dd></div>' : '') +
+      (d.modelo === 'remoto' ? '<div><dt>Fuso da equipe</dt><dd>' + esc(d.fuso != null ? fusoRotulo(d.fuso) : 'Qualquer fuso') + '</dd></div>' : '') +
       '<div><dt>Modelo</dt><dd>' + esc(modelo) + ' · ' + esc(d.tipo) + '</dd></div>' +
       '<div><dt>Salário</dt><dd>' + esc(d.salario) + '</dd></div>' +
       '<div><dt>Posições</dt><dd>' + v.posicoes + '</dd></div>' +
@@ -1202,7 +1440,8 @@
       (d.competencias.length ? '<div><dt>Competências</dt><dd>' + esc(d.competencias.join(', ')) + '</dd></div>' : '') +
       (d.idiomas.length ? '<div><dt>Idiomas</dt><dd>' + esc(d.idiomas.join(', ')) + '</dd></div>' : '') +
       (d.perguntasTriagem.length ? '<div><dt>Perguntas de triagem</dt><dd>' + esc(d.perguntasTriagem.map(function (t) { return t.texto; }).join(' · ')) + '</dd></div>' : '') +
-      '</dl>';
+      '</dl>' +
+      (d.modelo !== 'remoto' && !d.loc ? '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>Não localizamos essa cidade no protótipo, então as indicações desta vaga não serão filtradas por distância.</span></p>' : '');
     showDone({
       icone: 'check',
       titulo: 'Vaga publicada',
@@ -1268,6 +1507,7 @@
 
       var lista = todos.filter(function (c) { return c.status === filtro; });
       var rotulo = statusLabel(filtro).rotulo;
+      var vl = localVagaEmpresa(s, v);
       var html;
       if (!todos.length) {
         html = '<div class="empty"><p class="row-title">Ainda não há candidatos para esta vaga.</p>' +
@@ -1291,7 +1531,7 @@
           var candBlock = temCandidatura(c.candidatura) ? candidaturaCorpoHtml(c.candidatura, vagaProf) : '';
           return profCard(c.id, c.atende, requisitosDe(v),
             '<div class="btn-row"><a href="' + esc(perfilHref(c.id, v.id)) + '" class="btn btn-primary">Ver perfil</a>' +
-            '<button type="button" class="btn btn-outline" data-conversar="' + esc(c.id) + '">Conversar</button>' + seletor + '</div>', extra, candBlock);
+            '<button type="button" class="btn btn-outline" data-conversar="' + esc(c.id) + '">Conversar</button>' + seletor + '</div>', extra, candBlock, localProfTexto(c.id, vl));
         }).join('');
       }
       $('#cand-list').innerHTML = html;
@@ -1381,6 +1621,21 @@
       ? '<section class="section"><h2>Candidatura</h2>' + candidaturaCorpoHtml(candidatoObj.candidatura, vagaProf) + '</section>'
       : '';
 
+    // Localização e preferências (seção 6). Distância aproximada até a vaga, nunca o endereço.
+    var pl = perfilLocal(id);
+    var vl = vaga ? localVagaEmpresa(s, vaga) : null;
+    var distVaga = vl && vl.loc && vl.modelo !== 'remoto'
+      ? distTexto(distanciaKm(vl.loc, pl.loc), unidadeDoPais(vl.loc.pais)) + ' da vaga' : '';
+    var localSection = '<section class="section" aria-labelledby="h-local"><h2 id="h-local">Localização e preferências</h2><div class="card">' +
+      '<dl class="summary">' +
+        '<div><dt>Região</dt><dd>' + esc(p.local) + '</dd></div>' +
+        (distVaga ? '<div><dt>Distância</dt><dd>' + esc(distVaga) + ' · em linha reta, aproximada</dd></div>' : '') +
+        '<div><dt>Distância máxima que aceita</dt><dd>' + esc(distMaxTexto(pl)) + '</dd></div>' +
+        '<div><dt>Aceita se mudar</dt><dd>' + (pl.aceitaMudar ? 'Sim' : 'Não') + '</dd></div>' +
+        '<div><dt>Modelos de trabalho</dt><dd>' + esc(pl.modelos.map(modeloRotulo).join(', ')) + '</dd></div>' +
+        '<div><dt>Fuso horário</dt><dd>' + esc(fusoRotulo(pl.fuso)) + '</dd></div>' +
+      '</dl><p class="row-sub">O endereço não é mostrado: só a cidade e a distância aproximada.</p></div></section>';
+
     var reputacao = p.novo
       ? '<div class="card"><div class="chips">' + reputacaoChip(p) + '</div>' +
         '<p class="row-sub">A reputação aparece depois da primeira contratação confirmada pelos dois lados.</p></div>'
@@ -1399,7 +1654,7 @@
     $('#content').innerHTML =
       '<section class="card profile-head"><div class="media center"><div class="avatar xl" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
         '<div class="row-main"><h2 class="profile-name">' + nomeComSelo(p) + '</h2><div class="row-sub">' + esc(p.resumo) + '</div></div></div>' +
-        '<dl class="summary"><div><dt>Localização</dt><dd>' + esc(p.local) + '</dd></div><div><dt>Disponibilidade</dt><dd>' + esc(p.disponibilidade) + '</dd></div></dl>' +
+        '<dl class="summary"><div><dt>Localização</dt><dd>' + esc(p.local + (distVaga ? ' · ' + distVaga : '')) + '</dd></div><div><dt>Disponibilidade</dt><dd>' + esc(p.disponibilidade) + '</dd></div></dl>' +
         (atende !== null ? '<div class="chips"><span class="chip green">Atende ' + atende + ' de ' + requisitosDe(vaga) + ' requisitos · ' + esc(vaga.titulo) + '</span></div>' : '') +
         '<div class="btn-row"><button type="button" class="btn btn-primary" id="convidar"' + (s.convites[conviteKey] ? ' aria-disabled="true"' : '') + '>' +
           (s.convites[conviteKey] ? icon('check', 16, { stroke: 2.4 }) + 'Convite enviado' : 'Convidar para a vaga') + '</button>' +
@@ -1410,6 +1665,8 @@
       candSection +
 
       '<section class="section"><h2>Reputação</h2>' + reputacao + '</section>' +
+
+      localSection +
 
       '<section class="section" aria-labelledby="h-verif"><h2 id="h-verif">Experiência verificada</h2>' +
         '<div class="hist hist-verified"><p class="hist-badge">' + icon('check', 16, { stroke: 2.6 }) + 'Confirmada pelos dois lados na plataforma</p>' + verificada + '</div></section>' +
@@ -1705,7 +1962,7 @@
   function profNav(current) {
     return nav([
       { id: 'inicio', label: 'Início', icon: 'home', href: 'profissional.html' },
-      { id: 'buscar', label: 'Buscar', icon: 'search' },
+      { id: 'buscar', label: 'Buscar', icon: 'search', href: 'buscar.html?como=profissional' },
       { id: 'candidaturas', label: 'Candidaturas', icon: 'clipboard', href: 'candidaturas.html' },
       { id: 'mensagens', label: 'Mensagens', icon: 'message', href: 'mensagens.html?como=profissional' },
       { id: 'perfil', label: 'Perfil', icon: 'user' }
@@ -1734,6 +1991,25 @@
 
   /* ---------- Profissional: início ---------- */
 
+  // Onde fica a vaga, vista pelo João: cidade e distância aproximada ou, se remota, o fuso da equipe.
+  function localVagaTexto(v) {
+    var vl = localVagaJob(v);
+    if (vl.modelo === 'remoto' || !vl.loc) return 'De qualquer lugar' + (vl.fuso != null ? ' · equipe em ' + fusoCurto(vl.fuso) : '');
+    var pl = perfilLocal(PR_ID);
+    return cidadeCurta(vl.loc) + (vl.loc.pais !== pl.loc.pais ? ' · ' + vl.loc.pais : '') +
+      ' · ' + distTexto(distanciaKm(vl.loc, pl.loc), unidadeDoPais(pl.loc.pais)) + ' de você';
+  }
+
+  // Vagas indicadas ao João, filtradas pela mesma regra de localização das indicações da empresa.
+  function vagasIndicadasDe() {
+    var pl = perfilLocal(PR_ID), dentro = [], fora = [];
+    PR().vagasIndicadas.forEach(function (id) {
+      var r = regraLocal(localVagaJob(vagaJob(id)), pl);
+      if (r.ok) dentro.push(id); else fora.push({ id: id, motivo: r.motivo });
+    });
+    return { dentro: dentro, fora: fora };
+  }
+
   function vagaCard(vagaId) {
     var v = vagaJob(vagaId), e = empresaDe(v.empresa), c = compat(v);
     var chipReq = c.atende / c.total < 0.7 ? 'grey' : 'green';
@@ -1747,7 +2023,8 @@
     return '<article class="card card-tap">' +
       '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">' +
         '<div class="row-main"><h3 class="row-title vaga-title"><a href="vaga.html?id=' + q(v.id) + '" class="card-link">' + esc(v.titulo) + '</a></h3>' +
-        '<div class="row-sub">' + empresaLink(v.empresa) + ' · ' + esc(v.modelo) + ' · ' + esc(v.tipo) + '</div></div>' +
+        '<div class="row-sub">' + empresaLink(v.empresa) + ' · ' + esc(v.modelo) + ' · ' + esc(v.tipo) + '</div>' +
+        '<div class="row-sub loc-line">' + esc(localVagaTexto(v)) + '</div></div>' +
         '<span class="chip ' + chipReq + '">' + c.atende + ' de ' + c.total + '</span></div>' +
       repEmpresa + extra + '</article>';
   }
@@ -1793,7 +2070,7 @@
     $('#content').innerHTML =
       '<div class="stack"><div class="greeting"><h1>Olá, ' + esc(d.nome) + '</h1>' +
         '<p id="pend-txt">' + esc(pendTexto(sp)) + '</p></div>' +
-        '<a href="#" class="row-link" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px" data-todo="' + TODO + '">' +
+        '<a href="buscar.html?como=profissional" class="row-link" style="min-height:52px;border-color:var(--line-strong);color:var(--muted);font-size:15px">' +
           '<span style="color:var(--ink)">' + icon('search', 20, { stroke: 2 }) + '</span>Buscar vagas, cargos ou empresas</a></div>' +
 
       '<section class="section" aria-labelledby="h-pend"><h2 id="h-pend">Precisa da sua atenção</h2>' + pendItens + '</section>' +
@@ -1802,13 +2079,35 @@
         '<div class="rep-grid">' + repStat(rep.nota, 'Nota geral') + repStat(rep.trabalhos, 'Trabalhos verificados') + repStat(rep.contratariamDeNovo, 'Contratariam de novo') + '</div>' +
         accMore('Ver perfil'), true) +
 
-      accordion('acc-vagas', 'Vagas indicadas para você', plural(d.vagasIndicadas.length, 'vaga indicada', 'vagas indicadas'),
+      accordion('acc-vagas', 'Vagas indicadas para você', plural(vagasIndicadasDe().dentro.length, 'vaga indicada', 'vagas indicadas'),
         '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Combinam com o seu perfil e são de empresas com reputação no mesmo nível da sua.</span></p>' +
-        d.vagasIndicadas.map(vagaCard).join('') + accMore('Ver todas')) +
+        field('dist-max', 'Distância máxima que você aceita', 'select', '',
+          LOC().distanciasPerfil.map(function (n) { return '<option value="' + n + '">até ' + n + ' km</option>'; }).join(''),
+          { hint: 'Vagas presenciais e híbridas só aparecem até essa distância de ' + cidadeCurta(perfilLocal(PR_ID).loc) + ' (em linha reta) e dentro do raio de cada vaga. Vagas remotas aparecem de qualquer lugar.' }) +
+        '<div class="section" id="vagas-ind"></div>' +
+        '<div class="acc-more"><a href="buscar.html?como=profissional">Buscar mais vagas</a></div>') +
 
       '<div class="visually-hidden" role="status" id="live"></div>';
 
     paintCombinado($('#confirm-card'), comb, d.confirmacao.vaga);
+
+    function paintVagasIndicadas() {
+      var vi = vagasIndicadasDe();
+      $('#acc-vagas-sum').textContent = plural(vi.dentro.length, 'vaga indicada', 'vagas indicadas');
+      $('#vagas-ind').innerHTML = (vi.dentro.length ? vi.dentro.map(vagaCard).join('')
+        : '<div class="empty"><p class="row-title">Nenhuma vaga indicada nessa distância.</p></div>') +
+        (vi.fora.length ? '<p class="row-sub" id="vagas-fora">' + esc(plural(vi.fora.length, 'vaga indicada não aparece', 'vagas indicadas não aparecem')) +
+          ': fora da distância que você aceita ou do raio da vaga.</p>' : '');
+    }
+    $('#dist-max').value = String(perfilLocal(PR_ID).distanciaMax);
+    $('#dist-max').addEventListener('change', function () {
+      var st = loadP();
+      st.distanciaMax = Number(this.value);
+      saveP(st);
+      paintVagasIndicadas();
+      say('Distância máxima: até ' + this.value + ' km.');
+    });
+    paintVagasIndicadas();
 
     // Vindo de outra tela, já abre a seção pedida.
     var aba = { vagas: 'acc-vagas', reputacao: 'acc-rep' }[params.get('aba')];
@@ -1818,6 +2117,19 @@
   }
 
   /* ---------- Profissional: detalhe da vaga ---------- */
+
+  // Aviso (só informativo) quando a vaga fica fora da distância que o João aceita ou do raio dela.
+  // Candidatar-se continua possível: a regra vale para as indicações, não para a candidatura.
+  function foraDeAlcanceHtml(v) {
+    var vl = localVagaJob(v), pl = perfilLocal(PR_ID);
+    var r = regraLocal(vl, pl);
+    if (r.ok) return '';
+    var t = r.motivo === 'limite' ? 'Fica além da distância máxima que você aceita (' + distMaxTexto(pl) + ').'
+      : r.motivo === 'raio' ? 'Fica fora do raio desta vaga (' + raioTexto(vl.raio) + '), então ela não aparece nas suas indicações.'
+      : r.motivo === 'fuso' ? 'A equipe trabalha em outro fuso (' + fusoCurto(vl.fuso) + '), a mais de ' + LOC().toleranciaFusoHoras + ' h do seu.'
+      : 'Vaga remota, e o seu perfil não inclui trabalho remoto.';
+    return '<p class="note note-box" id="vaga-alcance">' + icon('eye', 16, { stroke: 2 }) + '<span>' + esc(t) + '</span></p>';
+  }
 
   function renderVaga() {
     var v = vagaJob(params.get('id') || '');
@@ -1848,10 +2160,11 @@
         '<section class="card"><h2 class="page-title vaga-h">' + esc(v.titulo) + '</h2>' +
           '<div class="row-sub">' + empresaLink(v.empresa) + '</div>' +
           '<div class="chips"><span class="chip">' + esc(v.modelo) + '</span><span class="chip">' + esc(v.tipo) + '</span></div>' +
-          '<dl class="summary"><div><dt>Local</dt><dd>' + esc(v.local) + '</dd></div>' +
+          '<dl class="summary"><div><dt>Local</dt><dd>' + esc(localVagaTexto(v)) + '</dd></div>' +
             '<div><dt>Salário</dt><dd>' + esc(sal) + '</dd></div>' +
             '<div><dt>Posições</dt><dd>' + v.posicoes + '</dd></div>' +
             '<div><dt>Publicada em</dt><dd>' + dataBR(v.publicadaEm) + '</dd></div></dl>' +
+          foraDeAlcanceHtml(v) +
           '<div class="btn-row">' +
             (ja
               ? '<a href="candidaturas.html" class="btn btn-outline">' + icon('check', 16, { stroke: 2.4 }) + 'Candidatura enviada · ver status</a>'
@@ -2453,6 +2766,143 @@
     });
   }
 
+  /* ---------- Busca (as duas jornadas): localização como filtro opcional (seções 10 e 10.1) ---------- */
+
+  // A empresa busca profissionais; o profissional busca vagas. Nenhum filtro vem ligado: quem pesquisa
+  // decide distância, cidade/estado/país, modelo de trabalho, disposto a se mudar (só na busca da
+  // empresa) e fuso horário. A distância parte da sede da empresa ou da região do profissional.
+  function renderBusca() {
+    var ehEmpresa = params.get('como') === 'empresa';
+    var f = E().formulario;
+    var origem = ehEmpresa ? E().loc : perfilLocal(PR_ID).loc;
+    var unidade = unidadeDoPais(origem.pais);
+
+    subTopbar(ehEmpresa ? 'Buscar profissionais' : 'Buscar vagas', ehEmpresa ? 'empresa.html' : 'profissional.html');
+    $('#nav').innerHTML = ehEmpresa ? empresaNav('buscar') : profNav('buscar');
+
+    var modelosHtml = '<div class="pills">' + f.modelos.map(function (m) {
+      return '<label class="pill"><input type="checkbox" name="f-modelo" value="' + m.id + '" class="pill-input"><span>' + esc(m.rotulo) + '</span></label>';
+    }).join('') + '</div>';
+
+    var filtros =
+      '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Todos os filtros são opcionais e valem só para esta busca. Distâncias aproximadas, em linha reta; o endereço de ninguém é mostrado.</span></p>' +
+      field('f-dist', 'Distância a partir de ' + cidadeCurta(origem) + (ehEmpresa ? ' (sede)' : ' (sua região)'), 'select', '',
+        '<option value="">Qualquer distância</option>' + LOC().raios[unidade].map(function (n) {
+          return '<option value="' + n + '">Até ' + esc(raioTexto({ valor: n, unidade: unidade })) + '</option>';
+        }).join(''),
+        { hint: ehEmpresa ? '' : 'Vagas remotas aparecem com qualquer distância.' }) +
+      field('f-pais', 'País', 'select', '', options(f.paises, 'Qualquer país')) +
+      field('f-estado', 'Estado ou região', 'input', 'type="text" maxlength="60" autocomplete="off" placeholder="Ex.: SP"', '') +
+      field('f-cidade', 'Cidade', 'input', 'type="text" maxlength="60" autocomplete="off" placeholder="Ex.: Campinas"', '') +
+      group('f-modelo', ehEmpresa ? 'Modelo de trabalho que aceita' : 'Modelo de trabalho', modelosHtml) +
+      (ehEmpresa ? group('f-mudar', 'Disposto a se mudar',
+        '<div class="pills"><label class="pill"><input type="checkbox" id="f-mudar-in" class="pill-input"><span>Só quem aceita se mudar</span></label></div>') : '') +
+      field('f-fuso', 'Fuso horário', 'select', '', options(LOC().fusos, 'Qualquer fuso')) +
+      '<div class="btn-row"><button type="button" class="btn btn-outline" id="f-limpar">Limpar filtros</button></div>';
+
+    $('#content').innerHTML =
+      '<div class="field"><label for="busca-texto">' + (ehEmpresa ? 'Nome, função ou competência' : 'Cargo, empresa ou competência') + '</label>' +
+        '<input id="busca-texto" type="search" autocomplete="off" placeholder="' + (ehEmpresa ? 'Ex.: Recepcionista' : 'Ex.: Atendente') + '"></div>' +
+      accordion('acc-filtros', 'Filtros de localização', 'Nenhum filtro', filtros) +
+      '<p class="row-sub" id="busca-count" role="status" aria-live="polite"></p>' +
+      '<div class="section" id="busca-list"></div>';
+
+    function contem(texto, termo) { return semAcento(texto).indexOf(semAcento(termo)) !== -1; }
+
+    function lerFiltros() {
+      return {
+        texto: $('#busca-texto').value.trim(),
+        dist: $('#f-dist').value ? raioKm({ valor: Number($('#f-dist').value), unidade: unidade }) : null,
+        pais: $('#f-pais').value,
+        estado: $('#f-estado').value.trim(),
+        cidade: $('#f-cidade').value.trim(),
+        modelos: $all('input[name="f-modelo"]:checked').map(function (i) { return i.value; }),
+        mudar: ehEmpresa && $('#f-mudar-in').checked,
+        fuso: $('#f-fuso').value === '' ? null : Number($('#f-fuso').value)
+      };
+    }
+
+    function nAtivos(fl) {
+      return [fl.dist, fl.pais, fl.estado, fl.cidade, fl.modelos.length, fl.mudar, fl.fuso != null].filter(Boolean).length;
+    }
+
+    // Local de texto (país, estado, cidade): um item sem localização (vaga remota) não passa.
+    function passaLocal(loc, fl) {
+      if (!fl.pais && !fl.estado && !fl.cidade) return true;
+      if (!loc) return false;
+      return (!fl.pais || loc.pais === fl.pais) &&
+        (!fl.estado || contem(loc.estado, fl.estado)) &&
+        (!fl.cidade || contem(loc.cidade, fl.cidade));
+    }
+
+    function resultadosVagas(fl) {
+      return Object.keys(window.MOCK.vagas).map(vagaJob).map(function (v) {
+        var vl = localVagaJob(v);
+        return { v: v, vl: vl, km: vl.loc ? distanciaKm(origem, vl.loc) : null };
+      }).filter(function (x) {
+        var v = x.v, e = empresaDe(v.empresa);
+        if (fl.texto && !contem([v.titulo, e.nome, v.competencias.join(' '), v.local].join(' '), fl.texto)) return false;
+        if (fl.dist != null && x.km != null && x.km > fl.dist) return false;
+        if (!passaLocal(x.vl.loc, fl)) return false;
+        if (fl.modelos.length && fl.modelos.indexOf(x.vl.modelo) === -1) return false;
+        if (fl.fuso != null && (x.vl.fuso != null ? x.vl.fuso : fusoDe(x.vl.loc)) !== fl.fuso) return false;
+        return true;
+      }).sort(function (a, b) { return (a.km == null ? Infinity : a.km) - (b.km == null ? Infinity : b.km); });
+    }
+
+    function resultadosProfissionais(fl) {
+      return Object.keys(window.MOCK.profissionais).map(function (id) {
+        var pl = perfilLocal(id);
+        return { id: id, p: prof(id), pl: pl, km: distanciaKm(origem, pl.loc) };
+      }).filter(function (x) {
+        if (fl.texto && !contem([x.p.nome, x.p.resumo, x.p.competencias.join(' '), x.p.local].join(' '), fl.texto)) return false;
+        if (fl.dist != null && x.km > fl.dist) return false;
+        if (!passaLocal(x.pl.loc, fl)) return false;
+        if (fl.modelos.length && !fl.modelos.some(function (m) { return x.pl.modelos.indexOf(m) !== -1; })) return false;
+        if (fl.mudar && !x.pl.aceitaMudar) return false;
+        if (fl.fuso != null && x.pl.fuso !== fl.fuso) return false;
+        return true;
+      }).sort(function (a, b) { return a.km - b.km; });
+    }
+
+    function profBuscaCard(x) {
+      var p = x.p;
+      var onde = cidadeCurta(x.pl.loc) + (x.pl.loc.pais !== origem.pais ? ' · ' + x.pl.loc.pais : '') + ' · ' + distTexto(x.km, unidade) + ' da sede';
+      return '<article class="card' + (p.novo ? ' card-new' : '') + '">' +
+        '<div class="media center"><div class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
+        '<div class="row-main"><div class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</div>' +
+        '<div class="row-sub">' + esc(p.resumo) + '</div><div class="row-sub loc-line">' + esc(onde) + '</div></div></div>' +
+        '<div class="chips">' + reputacaoChip(p) +
+          '<span class="chip">' + esc(x.pl.modelos.map(modeloRotulo).join(', ')) + '</span>' +
+          (x.pl.aceitaMudar ? '<span class="chip blue">Aceita se mudar</span>' : '') + '</div>' +
+        '<div class="btn-row"><a href="' + esc(perfilHref(x.id)) + '" class="btn btn-outline">Ver perfil</a></div></article>';
+    }
+
+    function paint() {
+      var fl = lerFiltros();
+      var n = nAtivos(fl);
+      $('#acc-filtros-sum').textContent = n ? plural(n, 'filtro ativo', 'filtros ativos') : 'Nenhum filtro';
+      var lista = ehEmpresa ? resultadosProfissionais(fl) : resultadosVagas(fl);
+      $('#busca-count').textContent = ehEmpresa
+        ? plural(lista.length, 'profissional encontrado', 'profissionais encontrados')
+        : plural(lista.length, 'vaga encontrada', 'vagas encontradas');
+      $('#busca-list').innerHTML = lista.length
+        ? lista.map(function (x) { return ehEmpresa ? profBuscaCard(x) : vagaCard(x.v.id); }).join('')
+        : '<div class="empty"><p class="row-title">Nenhum resultado com esses filtros.</p>' +
+          '<p class="row-sub">Tente ampliar a distância ou limpar algum filtro.</p></div>';
+    }
+
+    $('#content').addEventListener('input', paint);
+    $('#content').addEventListener('change', paint);
+    $('#f-limpar').addEventListener('click', function () {
+      $('#busca-texto').value = '';
+      ['#f-dist', '#f-pais', '#f-estado', '#f-cidade', '#f-fuso'].forEach(function (sel) { $(sel).value = ''; });
+      $all('#content input[type="checkbox"]').forEach(function (i) { i.checked = false; });
+      paint();
+    });
+    paint();
+  }
+
   /* ---------- Início ---------- */
 
   var page = document.body.getAttribute('data-page');
@@ -2470,7 +2920,8 @@
     'perfil-empresa': renderPerfilEmpresa,
     'avaliar-empresa': renderAvaliarEmpresa,
     mensagens: renderMensagens,
-    conversa: renderConversa
+    conversa: renderConversa,
+    buscar: renderBusca
   };
   if (PAGES[page]) PAGES[page]();
 })();
