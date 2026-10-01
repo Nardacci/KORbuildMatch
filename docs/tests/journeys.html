@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (82 passos, ~366 verificações).
+  KORbuild Match — testes automatizados (85 passos, ~386 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -1159,6 +1159,60 @@ var steps = [
     L(ic.ok, 'pwa: ícone 512 disponível');
     var reg = f.contentWindow.navigator.serviceWorker ? await f.contentWindow.navigator.serviceWorker.getRegistration() : null;
     L(!!reg, 'pwa: service worker registrado');
+  },
+
+  /* ===== BLOCO O — Mensagens sem resposta ===== */
+
+  // O1: a pendência da empresa leva à tela "Sem resposta", com as mais antigas primeiro
+  async function () {
+    await fresh();
+    await go('empresa.html');
+    var l = $$('.content a').filter(function (a) { return /mensagens sem resposta/.test(a.textContent); })[0];
+    L(!!l && /^2 mensagens sem resposta/.test(l.textContent.trim()) && /Candidatos de Atendente de loja/.test(l.textContent), 'sem resposta: pendência com a contagem real: ' + (l ? l.textContent.trim() : ''));
+    L(!!l && l.getAttribute('href') === 'mensagens.html?como=empresa&filtro=sem-resposta' && !l.hasAttribute('data-todo'), 'sem resposta: pendência navega para a tela');
+    await clickNav(l);
+    L(txt('#msg-filter [aria-pressed="true"]') === 'Sem resposta · 2' && /Todas · 3/.test(txt('#msg-filter')), 'sem resposta: filtro ativo e contagens');
+    var nomes = $$('.sr-card .row-title').map(function (e) { return e.textContent; });
+    L(nomes.join('|') === 'Mariana Rocha|Rafael Lima', 'sem resposta: mais antigas primeiro: ' + nomes.join('|'));
+    L($$('.sr-card .sr-espera').every(function (c) { return /^Esperando (há \d+ dias|desde)/.test(c.textContent); }), 'sem resposta: mostra há quanto tempo esperam');
+    L(/escala de fim de semana/.test(txt('.sr-card .sr-msg')), 'sem resposta: mostra a última mensagem recebida');
+    L(!$$('.sr-card').some(function (c) { return /Paulo Andrade/.test(c.textContent); }), 'sem resposta: conversa já respondida fica de fora');
+    L(btnH().length === 0, 'sem resposta: botoes 40px ' + JSON.stringify(btnH()));
+    L(!hasHScroll(), 'sem resposta: sem rolagem horizontal');
+  },
+  // O2: responder pela própria tela (resposta rápida e texto livre) até zerar
+  async function () {
+    $('.sr-card .sr-form button[type=submit]').click();
+    L(/Escreva a resposta/.test(txt('#toast')) && $$('.sr-card').length === 2, 'sem resposta: não envia vazio');
+    $('.sr-card [data-rapida]').click();
+    L($('.sr-card textarea').value === 'Podemos conversar amanhã?', 'sem resposta: resposta rápida preenche o campo');
+    $('.sr-card .sr-form button[type=submit]').click();
+    L(/Resposta enviada para Mariana Rocha/.test(txt('#toast')) && $$('.sr-card').length === 1, 'sem resposta: enviada sai da lista');
+    L(txt('#msg-filter [aria-pressed="true"]') === 'Sem resposta · 1', 'sem resposta: contagem atualiza');
+    set('.sr-card textarea', 'Quinta às 15h fica ótimo!');
+    $('.sr-card .sr-form button[type=submit]').click();
+    L(/Tudo respondido/.test(txt('#sr-vazio')), 'sem resposta: estado vazio quando tudo foi respondido');
+    linkByText('Ver todas as conversas').click();
+    var rows = $$('.chat-row');
+    L(rows.length === 3 && /Você: Quinta às 15h/.test(rows[0].textContent), 'sem resposta: a resposta aparece em Todas: ' + (rows[0] ? rows[0].textContent.replace(/\s+/g, ' ') : ''));
+    await go('conversa.html?id=mariana-rocha&como=empresa');
+    L($$('#msgs .bubble-out').length === 2 && /Podemos conversar amanhã\?/.test(txt('#msgs')), 'sem resposta: a resposta fica na conversa');
+    await go('empresa.html');
+    L(!$$('.content a').some(function (a) { return /mensagens? sem resposta/.test(a.textContent); }), 'sem resposta: pendência some quando zera');
+  },
+  // O3: nova mensagem do profissional volta para "Sem resposta"; o João também tem a visão dele
+  async function () {
+    var c = JSON.parse(f.contentWindow.sessionStorage.getItem('kor.chat'));
+    c.conversas['paulo-andrade'].mensagens.push({ de: 'profissional', texto: 'Perfeito, obrigado!', quando: new Date().toISOString() });
+    f.contentWindow.sessionStorage.setItem('kor.chat', JSON.stringify(c));
+    await go('empresa.html');
+    var l = $$('.content a').filter(function (a) { return /sem resposta/.test(a.textContent) && /mensage/.test(a.textContent); })[0];
+    L(!!l && /^1 mensagem sem resposta/.test(l.textContent.trim()), 'sem resposta: singular e volta a contar: ' + (l ? l.textContent.trim() : ''));
+    await go('mensagens.html?como=empresa');
+    var paulo = $$('.chat-row').filter(function (a) { return /Paulo Andrade/.test(a.textContent); })[0];
+    L(!!paulo && /Aguardando sua resposta/.test(paulo.textContent), 'sem resposta: lista geral marca a conversa lida que espera resposta');
+    await go('mensagens.html?como=profissional&filtro=sem-resposta');
+    L($$('.sr-card').length === 1 && /Hotel Vista Mar/.test(txt('.sr-card')), 'sem resposta (prof): a empresa que espera a resposta do João');
   }
 ];
 (async function () {

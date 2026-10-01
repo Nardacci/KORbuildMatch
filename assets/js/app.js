@@ -372,6 +372,28 @@
     return 'nenhum';
   }
 
+  // Conversa esperando resposta de um lado: a última mensagem veio do outro lado.
+  function semResposta(cv, como) {
+    var ult = cv.mensagens[cv.mensagens.length - 1];
+    return !!ult && ult.de !== como;
+  }
+
+  function conversasSemResposta(como) {
+    var chat = loadChat();
+    return Object.keys(chat.conversas).map(function (k) { return chat.conversas[k]; })
+      .filter(function (cv) { return (cv.ladoDono === como || cv.ladoDono === 'ambos') && semResposta(cv, como); })
+      .sort(function (a, b) { return new Date(a.mensagens[a.mensagens.length - 1].quando) - new Date(b.mensagens[b.mensagens.length - 1].quando); });
+  }
+
+  // "Esperando há 3 dias", contado a partir da data da última mensagem.
+  function esperandoHa(iso) {
+    var d = new Date(iso.slice(0, 10) + 'T00:00:00');
+    var dias = Math.round((new Date(hojeISO() + 'T00:00:00') - d) / 86400000);
+    if (dias <= 0) return 'Esperando desde hoje';
+    if (dias === 1) return 'Esperando desde ontem';
+    return 'Esperando há ' + dias + ' dias';
+  }
+
   // Só o canal do profissional varia (whatsapp/sms/email); a empresa sempre usa WhatsApp neste protótipo.
   function canalDoOutro(cv, como) {
     if (como !== 'empresa') return 'whatsapp';
@@ -1471,7 +1493,15 @@
         return rowStatic({ icone: 'check', tom: 'blue', titulo: 'Avaliação de ' + prof(p.profissional).nome + ' enviada',
           texto: 'Fica oculta até a pessoa enviar a dela ou o prazo terminar.' });
       }
-      var titulo = p.titulo;
+      var titulo = p.titulo, texto = p.texto, href = p.href;
+      if (p.id === 'mensagens') {
+        var sr = conversasSemResposta('empresa');
+        if (!sr.length) return '';
+        var vagasSr = sr.map(function (cv) { return cv.vagaTitulo; }).filter(function (t, i, a) { return t && a.indexOf(t) === i; });
+        titulo = plural(sr.length, 'mensagem sem resposta', 'mensagens sem resposta');
+        texto = vagasSr.length ? p.texto.replace('{vagas}', vagasSr.join(', ')) : 'Profissionais esperando seu retorno';
+        href = 'mensagens.html?como=empresa&filtro=sem-resposta';
+      }
       if (p.id === 'novos') {
         var n = candidatosDe(s, p.vaga).filter(function (c) { return c.status === 'novo'; }).length;
         if (!n) return '';
@@ -1485,7 +1515,7 @@
           '<div class="row-sub">' + esc(p.texto) + '</div></div></div>' +
           '<a href="' + esc(p.href) + '" class="btn btn-primary">' + esc(p.acao) + '</a></div>';
       }
-      return rowLink({ icone: p.icone, tom: p.tom, titulo: titulo, texto: p.texto, href: p.href });
+      return rowLink({ icone: p.icone, tom: p.tom, titulo: titulo, texto: texto, href: href });
     }).join('');
 
     // Lembrete da resposta garantida: candidatos novos com o prazo de 7 dias vencido (seção 7.1).
@@ -3780,38 +3810,127 @@
 
   function renderMensagens() {
     var como = params.get('como') === 'empresa' ? 'empresa' : 'profissional';
+    var filtro = params.get('filtro') === 'sem-resposta' ? 'sem-resposta' : 'todas';
     subTopbar('Mensagens', como === 'empresa' ? 'empresa.html' : 'profissional.html');
     $('#nav').innerHTML = como === 'empresa' ? empresaNav('mensagens') : profNav('mensagens');
 
-    var chat = loadChat();
     function ultima(cv) { return cv.mensagens.length ? cv.mensagens[cv.mensagens.length - 1].quando : '1970-01-01T00:00:00'; }
-
-    var lista = Object.keys(chat.conversas).map(function (id) { return chat.conversas[id]; })
-      .filter(function (cv) { return (cv.ladoDono === como || cv.ladoDono === 'ambos') && cv.mensagens.length > 0; })
-      .sort(function (a, b) { return new Date(ultima(b)) - new Date(ultima(a)); });
-
-    if (!lista.length) {
-      $('#content').innerHTML = '<div class="empty"><p class="row-title">Nenhuma conversa ainda.</p>' +
-        '<p class="row-sub">Inicie uma conversa a partir de um candidato, de uma vaga ou de um perfil.</p></div>';
-      return;
-    }
-
-    $('#content').innerHTML = '<div class="list chat-list">' + lista.map(function (cv) {
-      var outro = como === 'empresa' ? prof(cv.profissionalId) : empresaDe(cv.empresaId);
-      var msg = cv.mensagens[cv.mensagens.length - 1];
-      var naoLida = !cv.lidoPor[como];
-      var liberado = cv.compartilhou.empresa && cv.compartilhou.profissional;
-      var avatar = como === 'empresa'
+    function outroDe(cv) { return como === 'empresa' ? prof(cv.profissionalId) : empresaDe(cv.empresaId); }
+    function avatarDe(outro) {
+      return como === 'empresa'
         ? '<span class="avatar" style="background:' + esc(outro.cor) + '">' + esc(outro.iniciais) + '</span>'
         : '<span class="avatar avatar-empresa">' + esc(outro.iniciais) + '</span>';
-      return '<a class="chat-row' + (naoLida ? ' chat-unread' : '') + '" href="conversa.html?id=' + q(cv.id) + '&como=' + como + '">' + avatar +
-        '<span class="row-main"><span class="chat-row-top"><span class="row-title">' + esc(outro.nome) + '</span>' +
-          '<span class="chat-time">' + horaCurta(msg.quando) + '</span></span>' +
-          (cv.vagaTitulo ? '<span class="chat-vaga-lbl">' + esc(cv.vagaTitulo) + '</span>' : '') +
-          '<span class="row-sub chat-preview">' + esc((msg.de === como ? 'Você: ' : '') + msg.texto) + '</span>' +
-          (liberado ? '<span class="chip green chat-wa-badge">' + icon('check', 12, { stroke: 2.6 }) + 'WhatsApp liberado</span>' : '') + '</span>' +
-        (naoLida ? '<span class="chat-dot" aria-hidden="true"></span><span class="visually-hidden">, não lida</span>' : '') + '</a>';
-    }).join('') + '</div>';
+    }
+
+    // Respostas rápidas da tela "Sem resposta": um ponto de partida, sempre editável antes de enviar.
+    var rapidas = como === 'empresa'
+      ? ['Podemos conversar amanhã?', 'Já te explico os detalhes.', 'Voltamos com uma resposta até sexta.']
+      : ['Obrigado pelo retorno!', 'Tenho disponibilidade esta semana.', 'Pode me passar mais detalhes?'];
+
+    function pintar() {
+      var chat = loadChat();
+      var lista = Object.keys(chat.conversas).map(function (id) { return chat.conversas[id]; })
+        .filter(function (cv) { return (cv.ladoDono === como || cv.ladoDono === 'ambos') && cv.mensagens.length > 0; })
+        .sort(function (a, b) { return new Date(ultima(b)) - new Date(ultima(a)); });
+      var pendentes = conversasSemResposta(como);
+
+      var html = '';
+      if (lista.length) {
+        html += '<div class="filter" role="group" aria-label="Filtrar conversas" id="msg-filter">' +
+          '<button type="button" data-filtro="todas" aria-pressed="' + (filtro === 'todas') + '">Todas · ' + lista.length + '</button>' +
+          '<button type="button" data-filtro="sem-resposta" aria-pressed="' + (filtro === 'sem-resposta') + '">Sem resposta · ' + pendentes.length + '</button></div>';
+      }
+
+      if (!lista.length) {
+        html += '<div class="empty"><p class="row-title">Nenhuma conversa ainda.</p>' +
+          '<p class="row-sub">Inicie uma conversa a partir de um candidato, de uma vaga ou de um perfil.</p></div>';
+      } else if (filtro === 'sem-resposta') {
+        if (!pendentes.length) {
+          html += '<div class="empty" id="sr-vazio"><p class="row-title">Tudo respondido.</p>' +
+            '<p class="row-sub">Nenhuma ' + (como === 'empresa' ? 'pessoa' : 'empresa') + ' está esperando sua resposta.</p>' +
+            '<button type="button" class="btn btn-outline" data-filtro="todas">Ver todas as conversas</button></div>';
+        } else {
+          html += '<p class="row-sub sr-intro">' + (como === 'empresa'
+            ? 'Quem escreveu por último foi o profissional. Responder rápido mostra que a vaga está ativa e conta na sua reputação de resposta.'
+            : 'Quem escreveu por último foi a empresa. Responder rápido ajuda a seguir no processo.') + ' As mais antigas aparecem primeiro.</p>' +
+            pendentes.map(function (cv) {
+              var outro = outroDe(cv);
+              var msg = cv.mensagens[cv.mensagens.length - 1];
+              return '<div class="card sr-card" data-conv="' + esc(cv.id) + '">' +
+                '<div class="media">' + avatarDe(outro) +
+                  '<div class="row-main"><div class="row-title">' + esc(outro.nome) + '</div>' +
+                  (cv.vagaTitulo ? '<span class="chat-vaga-lbl">' + esc(cv.vagaTitulo) + '</span>' : '') +
+                  '<span class="chip amber sr-espera">' + icon('clock', 12, { stroke: 2.4 }) + esc(esperandoHa(msg.quando)) + '</span></div></div>' +
+                '<blockquote class="sr-msg">' + esc(msg.texto) + '<span class="chat-time"> · ' + horaCurta(msg.quando) + '</span></blockquote>' +
+                '<div class="sr-rapidas" role="group" aria-label="Respostas rápidas">' + rapidas.map(function (r) {
+                  return '<button type="button" class="sr-rapida" data-rapida="' + esc(r) + '">' + esc(r) + '</button>';
+                }).join('') + '</div>' +
+                '<form class="sr-form" data-conv="' + esc(cv.id) + '">' +
+                  '<label class="visually-hidden" for="sr-in-' + esc(cv.id) + '">Resposta para ' + esc(outro.nome) + '</label>' +
+                  '<textarea id="sr-in-' + esc(cv.id) + '" rows="2" maxlength="500" placeholder="Escreva sua resposta…"></textarea>' +
+                  '<div class="btn-row"><button type="submit" class="btn btn-primary">' + icon('send', 16, { stroke: 2.2 }) + 'Responder</button>' +
+                  '<a class="btn btn-outline" href="conversa.html?id=' + q(cv.id) + '&como=' + como + '">Abrir conversa</a></div>' +
+                '</form></div>';
+            }).join('');
+        }
+      } else {
+        html += '<div class="list chat-list">' + lista.map(function (cv) {
+          var outro = outroDe(cv);
+          var msg = cv.mensagens[cv.mensagens.length - 1];
+          var naoLida = !cv.lidoPor[como];
+          var liberado = cv.compartilhou.empresa && cv.compartilhou.profissional;
+          return '<a class="chat-row' + (naoLida ? ' chat-unread' : '') + '" href="conversa.html?id=' + q(cv.id) + '&como=' + como + '">' + avatarDe(outro) +
+            '<span class="row-main"><span class="chat-row-top"><span class="row-title">' + esc(outro.nome) + '</span>' +
+              '<span class="chat-time">' + horaCurta(msg.quando) + '</span></span>' +
+              (cv.vagaTitulo ? '<span class="chat-vaga-lbl">' + esc(cv.vagaTitulo) + '</span>' : '') +
+              '<span class="row-sub chat-preview">' + esc((msg.de === como ? 'Você: ' : '') + msg.texto) + '</span>' +
+              (liberado ? '<span class="chip green chat-wa-badge">' + icon('check', 12, { stroke: 2.6 }) + 'WhatsApp liberado</span>' : '') +
+              (!naoLida && semResposta(cv, como) ? '<span class="chip amber chat-wa-badge">Aguardando sua resposta</span>' : '') + '</span>' +
+            (naoLida ? '<span class="chat-dot" aria-hidden="true"></span><span class="visually-hidden">, não lida</span>' : '') + '</a>';
+        }).join('') + '</div>';
+      }
+      $('#content').innerHTML = html;
+    }
+
+    pintar();
+
+    $('#content').addEventListener('click', function (e) {
+      var f = e.target.closest('[data-filtro]');
+      if (f) {
+        filtro = f.getAttribute('data-filtro');
+        try { window.history.replaceState(null, '', 'mensagens.html?como=' + como + (filtro === 'sem-resposta' ? '&filtro=sem-resposta' : '')); } catch (err) { /* sem history: segue */ }
+        pintar();
+        var alvo = $('#msg-filter [aria-pressed="true"]');
+        if (alvo) alvo.focus();
+        return;
+      }
+      var r = e.target.closest('[data-rapida]');
+      if (r) {
+        var ta = r.closest('.sr-card').querySelector('textarea');
+        ta.value = r.getAttribute('data-rapida');
+        ta.focus();
+      }
+    });
+
+    $('#content').addEventListener('submit', function (e) {
+      var form = e.target.closest('.sr-form');
+      if (!form) return;
+      e.preventDefault();
+      var ta = form.querySelector('textarea');
+      var texto = ta.value.trim();
+      if (!texto) { ta.focus(); toast('Escreva a resposta ou escolha uma resposta rápida.'); return; }
+      var id = form.getAttribute('data-conv');
+      var c = loadChat(), cv = c.conversas[id];
+      cv.mensagens.push({ de: como, texto: texto, quando: new Date().toISOString() });
+      cv.lidoPor[como] = true;
+      cv.lidoPor[como === 'empresa' ? 'profissional' : 'empresa'] = false;
+      saveChat(c);
+      var nome = outroDe(cv).nome;
+      pintar();
+      toast('Resposta enviada para ' + nome + '.');
+      var prox = $('.sr-card textarea') || $('#sr-vazio .btn');
+      if (prox) prox.focus();
+    });
   }
 
   /* ---------- Conversa ---------- */

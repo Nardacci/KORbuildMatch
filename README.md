@@ -21,7 +21,7 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `candidaturas.html` | Profissional: minhas candidaturas, com linha do tempo |
 | `perfil-empresa.html?id=ID` | Profissional: perfil da empresa (reputação, vagas, avaliações) |
 | `avaliar-empresa.html?id=ID` | Profissional: avaliação cega da empresa |
-| `mensagens.html?como=empresa\|profissional` | As duas jornadas: lista de conversas |
+| `mensagens.html?como=empresa\|profissional` | As duas jornadas: lista de conversas, com o filtro "Sem resposta" (`&filtro=sem-resposta`) para responder ali mesmo |
 | `conversa.html?id=ID&como=empresa\|profissional` | As duas jornadas: chat de uma conversa |
 | `vagas.html` | Empresa: minhas vagas por estado (Abertas, Pausadas, Rascunhos, Encerradas) |
 | `minha-empresa.html` | Empresa: dados da empresa, plano Essencial, reputação e vagas preenchidas |
@@ -110,6 +110,12 @@ Reputação (seção 8):
 - **Privacidade por vínculo**: em "Meu perfil", cada trabalho verificado pode mostrar ou ocultar o nome da empresa. Oculto, a empresa vê "Empresa não divulgada", mas o vínculo continua contando na reputação.
 - **Resposta à contestação do combinado**: quando o João contesta, a empresa toca em "Combinado contestado" e escolhe **corrigir o combinado** (formulário já preenchido) ou **manter e responder**. Nos dois casos o João recebe o pedido de confirmação de novo, com o aviso do que a empresa fez. O combinado só muda com o aceite dos dois lados.
 
+Mensagens sem resposta:
+
+- Na home da empresa, a pendência **"N mensagens sem resposta"** conta as conversas em que o profissional escreveu por último (some quando chega a zero) e abre `mensagens.html?como=empresa&filtro=sem-resposta`.
+- A tela mostra as mais antigas primeiro, com **há quanto tempo a pessoa espera**, a vaga e a última mensagem. Dá para **responder ali mesmo** (com respostas rápidas editáveis) ou abrir a conversa. Quem foi respondido sai da lista; o filtro **Todas / Sem resposta** fica no topo de Mensagens, nas duas jornadas.
+- Dados de exemplo: Mariana Rocha (lida, sem resposta) e Rafael Lima (não lida) esperam a empresa; Paulo Andrade já foi respondido.
+
 Notificações (seção 11):
 
 - O **sino** mostra quantas notificações não foram lidas e abre `notificacoes.html`. Abrir a tela marca tudo como lido (as novas continuam destacadas até sair).
@@ -151,7 +157,7 @@ Identidade visual (modelo C · marca forte):
 
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (82 passos, ~366 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (85 passos, ~386 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -204,4 +210,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-4`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-5`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
