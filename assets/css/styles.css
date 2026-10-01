@@ -1483,7 +1483,10 @@ body[data-page="login"] .app {
 
 /* ---------- Cadastro ---------- */
 
-body[data-page="cadastro"] .app {
+body[data-page="cadastro"] .app,
+body[data-page="entrar"] .app,
+body[data-page="recuperar"] .app,
+body[data-page="nova-senha"] .app {
   background:
     radial-gradient(120% 50% at 100% 0%, rgba(31, 79, 216, 0.9) 0%, rgba(31, 79, 216, 0) 60%),
     radial-gradient(90% 40% at 0% 45%, rgba(14, 124, 102, 0.75) 0%, rgba(14, 124, 102, 0) 62%),
@@ -1573,3 +1576,25 @@ body[data-page="demo"] .app {
 .btn[disabled] { opacity: .7; cursor: progress; }
 .btn-sair { margin-left: auto; min-height: 40px; padding: 0 16px; background: rgba(255, 255, 255, .12); color: #FFFFFF; border: 0; }
 .btn-sair:hover { background: rgba(255, 255, 255, .2); }
+
+/* Busca de cidade (combobox) */
+.combo { position: relative; }
+.combo-lista {
+  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+  margin: 0; padding: 6px; list-style: none;
+  max-height: 288px; overflow-y: auto;
+  background: #FFFFFF; border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+  box-shadow: 0 16px 32px -16px rgba(10, 22, 40, 0.45);
+}
+.combo-lista [role="option"] {
+  display: flex; flex-direction: column; gap: 1px;
+  min-height: 44px; justify-content: center;
+  padding: 6px 10px; border-radius: 10px; cursor: pointer;
+}
+.combo-lista [role="option"] strong { font-size: 15px; font-weight: 700; color: var(--ink); }
+.combo-lista [role="option"] span { font-size: 12.5px; color: var(--muted); }
+.combo-lista [role="option"]:hover,
+.combo-lista [role="option"][aria-selected="true"] { background: var(--blue-tint); }
+.combo-vazio { padding: 10px; font-size: 14px; color: var(--muted); }
+.sobre-hero { position: relative; z-index: 1; margin-top: -48px; box-shadow: 0 10px 24px -12px rgba(10, 22, 40, 0.45); }
+.combo input { width: 100%; box-sizing: border-box; }

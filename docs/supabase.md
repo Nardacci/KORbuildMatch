@@ -23,7 +23,8 @@ A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
 | Arquivo | O que faz |
 | --- | --- |
 | `app/config.js` | Endereço do projeto e chave publicável. Só a publicável: a secreta nunca vai para o site. |
-| `app/dados.js` | Listas dos formulários (países, cidades com ponto aproximado, portes, disponibilidade). |
+| `app/dados.js` | Listas dos formulários (países, portes, disponibilidade, distâncias). |
+| `app/cidades/` | Cidades do mundo, um arquivo por país (GeoNames, CC BY 4.0), baixado só quando o país é escolhido. Gerado por `scripts/gerar-cidades.js`. |
 | `app/app.js` | As telas: `entrar`, `cadastro`, `recuperar`, `nova-senha`, `inicio`, `perfil`. |
 | `assets/vendor/supabase-js-2.117.2.js` | Biblioteca oficial do Supabase, guardada no site (sem depender de CDN). |
 
@@ -32,9 +33,9 @@ A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
 - **Recuperar senha**: o link abre `app/nova-senha.html`. A resposta é a mesma exista ou não a conta, para não revelar quem está cadastrado.
 - **Início**: mostra o que falta no perfil (progresso) e leva para editar.
 - **Perfil**: empresa (setor, porte, sede, site, sobre) ou profissional (o que faz, cidade, disponibilidade, distância, modelos, competências, aparecer nas buscas), mais o contato e a troca de senha.
-- **Cidades**: por enquanto, a mesma lista fixa do protótipo. Para aceitar qualquer cidade, a próxima evolução é um serviço de busca de endereços (geocodificação).
+- **País e cidade**: primeiro o país (todos os países, com Brasil, Estados Unidos e Portugal no topo; o padrão vem do idioma do navegador), depois a cidade com busca: digitando "laco" aparece "Laconia, NH". Aceita nome sem acento e "cidade, estado". São cerca de 170 mil cidades (mais de 1.000 habitantes ou sedes de município); quem mora numa cidade menor escolhe a mais próxima. O banco guarda o código do país (BR, US…), a cidade, o estado (sigla quando existe) e o ponto aproximado. Nos EUA, as distâncias aparecem em milhas.
 
-Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num navegador contra um Supabase simulado (37 verificações).
+Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num navegador contra um Supabase simulado (57 verificações).
 
 ### Modelos de e-mail em português
 
