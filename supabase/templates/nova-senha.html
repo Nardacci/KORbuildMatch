@@ -1,0 +1,117 @@
+<!--
+  KORbuild Match — e-mail para criar uma nova senha
+  Supabase: Authentication → Emails → Templates → Reset password
+  Assunto: Crie uma nova senha no KORbuild Match
+  Cole todo o conteúdo abaixo no campo de HTML (Source).
+
+  Variáveis do Supabase:
+    .ConfirmationURL  link para criar a nova senha (abre app/nova-senha.html)
+    .Data.nome        nome informado no cadastro (pessoa ou empresa)
+  Cores do modelo C: azul-marinho #0A1628, verde-limão #C6F432, azul #1F4FD8.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nova senha — KORbuild Match</title>
+</head>
+<body style="margin:0; padding:0; background-color:#F3F6FA; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+<!-- Pré-visualização (aparece na lista de e-mails, antes de abrir) -->
+<div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+  Recebemos um pedido para trocar a senha da sua conta no KORbuild Match.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3F6FA; padding:32px 16px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#FFFFFF; border-radius:16px; overflow:hidden; border:1px solid #E3E8EF;">
+
+        <!-- Cabeçalho: marca do app (quadrado verde-limão com o check + "KORbuild Match") -->
+        <tr>
+          <td style="padding:28px 40px; text-align:center; background-color:#0A1628;">
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+              <tr>
+                <td style="padding-right:10px; vertical-align:middle;">
+                  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                    <td width="36" height="36" align="center" valign="middle" style="width:36px; height:36px; background-color:#C6F432; border-radius:10px; font-size:20px; font-weight:800; line-height:36px; color:#0A1628;">&#10003;</td>
+                  </tr></table>
+                </td>
+                <td style="font-size:18px; font-weight:800; color:#FFFFFF; vertical-align:middle; white-space:nowrap;">
+                  KORbuild <span style="color:#C6F432;">Match</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Corpo -->
+        <tr>
+          <td style="padding:36px 40px 8px 40px;">
+            <h1 style="margin:0 0 16px 0; font-size:22px; line-height:30px; color:#0A1628; font-weight:800;">
+              {{ if .Data.nome }}Olá, {{ .Data.nome }}!{{ else }}Olá!{{ end }}
+            </h1>
+            <p style="margin:0 0 28px 0; font-size:15px; line-height:24px; color:#3A485C;">
+              Recebemos um pedido para trocar a senha da sua conta no KORbuild Match.
+              Toque no botão para criar uma nova senha.
+            </p>
+
+            <!-- Botão -->
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 28px 0;">
+              <tr>
+                <td style="border-radius:12px; background-color:#C6F432;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block; padding:14px 32px; font-size:15px; font-weight:800; color:#0A1628; text-decoration:none; border-radius:12px;">
+                    Criar nova senha &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Dicas -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3F6FA; border-radius:12px; margin-bottom:8px;">
+              <tr>
+                <td style="padding:22px 24px;">
+                  <p style="margin:0 0 10px 0; font-size:13px; font-weight:800; color:#1F4FD8; text-transform:uppercase; letter-spacing:0.04em;">
+                    Para uma senha segura
+                  </p>
+                  <p style="margin:0; font-size:14px; line-height:21px; color:#3A485C;">
+                    Use pelo menos 8 caracteres, misturando letras e números, e não repita
+                    a senha de outros sites.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Aviso de segurança -->
+        <tr>
+          <td style="padding:8px 40px 32px 40px;">
+            <p style="margin:0; font-size:13px; line-height:20px; color:#8391A5;">
+              O link vale por 1 hora e só pode ser usado uma vez. Se não foi você que pediu,
+              ignore este e-mail: sua senha continua a mesma.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Rodapé -->
+        <tr>
+          <td style="padding:24px 40px; background-color:#F3F6FA; border-top:1px solid #E3E8EF; text-align:center;">
+            <p style="margin:0 0 4px 0; font-size:12px; color:#8391A5;">
+              Você recebeu este e-mail porque alguém pediu uma nova senha para a sua conta no <strong>KORbuild Match</strong>.
+            </p>
+            <p style="margin:0; font-size:12px; color:#8391A5;">
+              KORbuild Match · korbuildmatch.com
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

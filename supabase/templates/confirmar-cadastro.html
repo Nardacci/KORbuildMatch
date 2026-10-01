@@ -1,0 +1,161 @@
+<!--
+  KORbuild Match — e-mail de confirmação de cadastro
+  Supabase: Authentication → Emails → Templates → Confirm signup
+  Assunto: Confirme sua conta no KORbuild Match
+  Cole todo o conteúdo abaixo no campo de HTML (Source).
+
+  Variáveis do Supabase:
+    .ConfirmationURL  link de confirmação
+    .Data.nome        nome informado no cadastro (pessoa ou empresa)
+    .Data.tipo        "empresa" ou "profissional" (muda o "O que vem depois")
+  Cores do modelo C: azul-marinho #0A1628, verde-limão #C6F432, azul #1F4FD8.
+-->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirme sua conta — KORbuild Match</title>
+</head>
+<body style="margin:0; padding:0; background-color:#F3F6FA; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+
+<!-- Pré-visualização (aparece na lista de e-mails, antes de abrir) -->
+<div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+  Falta só confirmar seu e-mail para ativar sua conta no KORbuild Match.
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3F6FA; padding:32px 16px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background-color:#FFFFFF; border-radius:16px; overflow:hidden; border:1px solid #E3E8EF;">
+
+        <!-- Cabeçalho: marca do app (quadrado verde-limão com o check + "KORbuild Match") -->
+        <tr>
+          <td style="padding:28px 40px; text-align:center; background-color:#0A1628;">
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+              <tr>
+                <td style="padding-right:10px; vertical-align:middle;">
+                  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                    <td width="36" height="36" align="center" valign="middle" style="width:36px; height:36px; background-color:#C6F432; border-radius:10px; font-size:20px; font-weight:800; line-height:36px; color:#0A1628;">&#10003;</td>
+                  </tr></table>
+                </td>
+                <td style="font-size:18px; font-weight:800; color:#FFFFFF; vertical-align:middle; white-space:nowrap;">
+                  KORbuild <span style="color:#C6F432;">Match</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Corpo -->
+        <tr>
+          <td style="padding:36px 40px 8px 40px;">
+            <h1 style="margin:0 0 16px 0; font-size:22px; line-height:30px; color:#0A1628; font-weight:800;">
+              {{ if .Data.nome }}Olá, {{ .Data.nome }}! Falta só um passo{{ else }}Bem-vindo(a)! Falta só um passo{{ end }}
+            </h1>
+            <p style="margin:0 0 16px 0; font-size:15px; line-height:24px; color:#3A485C;">
+              O KORbuild Match conecta empresas e profissionais com confiança:
+              cada contratação confirmada vira <strong>histórico verificado</strong>,
+              e os dois lados se avaliam. Sem feed, sem distração: só o que leva
+              a uma boa contratação.
+            </p>
+            <p style="margin:0 0 28px 0; font-size:15px; line-height:24px; color:#3A485C;">
+              Confirme seu e-mail para ativar a conta. É rápido e garante que só
+              você tenha acesso a ela.
+            </p>
+
+            <!-- Botão -->
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 32px 0;">
+              <tr>
+                <td style="border-radius:12px; background-color:#C6F432;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block; padding:14px 32px; font-size:15px; font-weight:800; color:#0A1628; text-decoration:none; border-radius:12px;">
+                    Confirmar minha conta &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- O que vem depois (muda para empresa ou profissional) -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F3F6FA; border-radius:12px; margin-bottom:8px;">
+              <tr>
+                <td style="padding:22px 24px;">
+                  <p style="margin:0 0 14px 0; font-size:13px; font-weight:800; color:#1F4FD8; text-transform:uppercase; letter-spacing:0.04em;">
+                    O que vem depois
+                  </p>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    {{ if eq (printf "%v" .Data.tipo) "empresa" }}
+                    <tr>
+                      <td style="padding-bottom:12px; vertical-align:top; width:24px; font-size:14px; color:#1F4FD8; font-weight:800;">1.</td>
+                      <td style="padding-bottom:12px; font-size:14px; line-height:21px; color:#3A485C;">
+                        Complete o perfil da empresa: setor, sede e um pouco sobre como é trabalhar com vocês.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-bottom:12px; vertical-align:top; width:24px; font-size:14px; color:#1F4FD8; font-weight:800;">2.</td>
+                      <td style="padding-bottom:12px; font-size:14px; line-height:21px; color:#3A485C;">
+                        Publique sua primeira vaga. Os 3 meses grátis do plano Essencial começam aí, e o cartão só é pedido no fim.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="vertical-align:top; width:24px; font-size:14px; color:#1F4FD8; font-weight:800;">3.</td>
+                      <td style="font-size:14px; line-height:21px; color:#3A485C;">
+                        Receba profissionais indicados perto da vaga, com reputação verificada, e responda cada candidato em até 7 dias.
+                      </td>
+                    </tr>
+                    {{ else }}
+                    <tr>
+                      <td style="padding-bottom:12px; vertical-align:top; width:24px; font-size:14px; color:#1F4FD8; font-weight:800;">1.</td>
+                      <td style="padding-bottom:12px; font-size:14px; line-height:21px; color:#3A485C;">
+                        Complete seu perfil: o que você faz, suas competências e a distância que aceita até o trabalho.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding-bottom:12px; vertical-align:top; width:24px; font-size:14px; color:#1F4FD8; font-weight:800;">2.</td>
+                      <td style="padding-bottom:12px; font-size:14px; line-height:21px; color:#3A485C;">
+                        Receba vagas que combinam com você e candidate-se em poucos toques. Toda candidatura tem resposta.
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="vertical-align:top; width:24px; font-size:14px; color:#1F4FD8; font-weight:800;">3.</td>
+                      <td style="font-size:14px; line-height:21px; color:#3A485C;">
+                        Cada contratação confirmada entra no seu histórico verificado e acompanha você nas próximas oportunidades.
+                      </td>
+                    </tr>
+                    {{ end }}
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Aviso de segurança -->
+        <tr>
+          <td style="padding:8px 40px 32px 40px;">
+            <p style="margin:0; font-size:13px; line-height:20px; color:#8391A5;">
+              O link vale por 24 horas. Se você não criou uma conta no KORbuild Match,
+              pode ignorar este e-mail com segurança: nenhuma ação será tomada.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Rodapé -->
+        <tr>
+          <td style="padding:24px 40px; background-color:#F3F6FA; border-top:1px solid #E3E8EF; text-align:center;">
+            <p style="margin:0 0 4px 0; font-size:12px; color:#8391A5;">
+              Você recebeu este e-mail porque criou uma conta no <strong>KORbuild Match</strong>.
+            </p>
+            <p style="margin:0; font-size:12px; color:#8391A5;">
+              KORbuild Match · korbuildmatch.com
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>
