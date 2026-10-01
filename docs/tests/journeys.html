@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (80 passos, ~357 verificações).
+  KORbuild Match — testes automatizados (82 passos, ~366 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -23,6 +23,7 @@
     L — Filtros restantes da busca e ajuda da IA para redigir vaga e perfil
     M — Ciclo do MVP: cadastro, registro pelo profissional, "Deu certo?", contestações,
         anotações internas, denunciar conversa, baixa compatibilidade e perfil mínimo
+    N — Tela de demonstração e app instalável (manifesto, ícones, service worker)
 -->
 <meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
 <iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
@@ -1133,6 +1134,31 @@ var steps = [
     L(txt('#done-title') === 'Contestação enviada', 'recusa: contestação enviada');
     await go('candidaturas.html?status=encerradas');
     L(/A empresa contestou sua resposta/.test(txt('#recusa-contestada')), 'recusa: o profissional vê a contestação');
+  },
+
+  /* ===== BLOCO N — Demonstração e app instalável (PWA) ===== */
+
+  // N1: tela de demonstração: jornadas, atalhos, instalar e recomeçar
+  async function () {
+    await go('index.html');
+    await clickNav(linkByText('Sobre esta demonstração'));
+    L(txt('.hero h1') === 'Demonstração' && /Sou uma empresa/.test(txt('#demo')) && /Sou um profissional/.test(txt('#demo')), 'demo: escolha de jornada');
+    L($$('.demo-link').length >= 11, 'demo: atalhos para as telas principais: ' + $$('.demo-link').length);
+    L(/Instalar no celular/.test(txt('#demo')) && /Adicionar à Tela de Início/.test(txt('#instalar-area')), 'demo: instruções para instalar no celular');
+    f.contentWindow.sessionStorage.setItem('kor.empresa', '{"vagas":[{"id":"x"}]}');
+    $('#demo-reset').click();
+    L(!f.contentWindow.sessionStorage.getItem('kor.empresa'), 'demo: recomeçar apaga o estado da demonstração');
+    L(!hasHScroll(), 'demo: sem rolagem horizontal');
+  },
+  // N2: manifesto do app, ícones e service worker
+  async function () {
+    L(!!$('link[rel="manifest"]') && !!$('link[rel="apple-touch-icon"]') && $('meta[name="theme-color"]').getAttribute('content') === '#0A1628', 'pwa: manifesto e ícones nas páginas');
+    var m = await (await f.contentWindow.fetch('manifest.webmanifest')).json();
+    L(m.display === 'standalone' && m.start_url === './demo.html' && m.icons.length === 3 && m.icons.some(function (i) { return i.purpose === 'maskable'; }), 'pwa: manifesto válido (standalone, ícones, maskable)');
+    var ic = await f.contentWindow.fetch('assets/icons/icon-512.png');
+    L(ic.ok, 'pwa: ícone 512 disponível');
+    var reg = f.contentWindow.navigator.serviceWorker ? await f.contentWindow.navigator.serviceWorker.getRegistration() : null;
+    L(!!reg, 'pwa: service worker registrado');
   }
 ];
 (async function () {

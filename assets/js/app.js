@@ -1172,6 +1172,84 @@
     update();
   }
 
+  /* ---------- App instalável (PWA, seção 14) ---------- */
+
+  // Registra o service worker (rede primeiro, cópia para abrir offline). Não roda em arquivo local.
+  if ('serviceWorker' in navigator && /^https?:$/.test(window.location.protocol)) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* segue sem offline */ }); });
+  }
+  var pedidoInstalar = null; // evento do navegador para instalar (Chrome/Android)
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    pedidoInstalar = e;
+    document.dispatchEvent(new CustomEvent('pode-instalar'));
+  });
+  function ehApp() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+
+  /* ---------- Tela de demonstração (para testes com usuários) ---------- */
+
+  function renderDemo() {
+    var root = $('#demo');
+    function link(href, titulo, texto, icone) {
+      return '<a href="' + href + '" class="row-link demo-link"><span class="icon-tile">' + icon(icone, 20) + '</span>' +
+        '<span class="row-main"><span class="row-title">' + esc(titulo) + '</span><span class="row-sub">' + esc(texto) + '</span></span>' +
+        '<span class="chevron">' + icon('chevron', 18, { stroke: 2 }) + '</span></a>';
+    }
+    function instalarHtml() {
+      if (ehApp()) return '<p class="row-sub" id="instalar-status">' + icon('check', 16, { stroke: 2.4 }) + ' Você já está usando o KORbuild Match como app.</p>';
+      return (pedidoInstalar ? '<button type="button" class="btn btn-primary" id="instalar-btn">' + icon('plus', 16, { stroke: 2.4 }) + 'Instalar app</button>' : '') +
+        '<ul class="check-list"><li>' + icon('check', 16, { stroke: 2.6 }) + '<span><strong>Android (Chrome):</strong> menu ⋮ → “Instalar app” ou “Adicionar à tela inicial”.</span></li>' +
+        '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span><strong>iPhone (Safari):</strong> Compartilhar → “Adicionar à Tela de Início”.</span></li></ul>';
+    }
+    root.innerHTML =
+      '<div class="login-top"><div class="brand">' + brandMark(true) + '<div class="brand-name" style="font-size:18px">KORbuild <span>Match</span></div></div>' +
+        '<a href="index.html" class="lang-btn" style="display:inline-flex;align-items:center;text-decoration:none">Entrar</a></div>' +
+      '<div class="hero"><h1>Demonstração</h1>' +
+        '<p>Protótipo de validação do KORbuild Match, com dados fictícios. Nada é enviado nem salvo fora deste navegador. Escolha um lado e use como se fosse de verdade.</p></div>' +
+
+      '<section class="login-card" aria-labelledby="h-jornadas"><h2 class="card-title" id="h-jornadas">Escolha uma jornada</h2>' +
+        link('empresa.html', 'Sou uma empresa', 'Você é a Empresa Exemplo: publica vagas, recebe indicados, contrata e avalia.', 'building') +
+        link('profissional.html', 'Sou um profissional', 'Você é o João Silva: busca vagas, se candidata, confirma a contratação e avalia.', 'user') +
+        link('cadastro.html', 'Criar uma conta', 'Veja o cadastro, a confirmação do e-mail e a verificação da empresa.', 'plus') + '</section>' +
+
+      '<section class="login-card" aria-labelledby="h-atalhos"><h2 class="card-title" id="h-atalhos">Ir direto para</h2>' +
+        '<p class="sub-h">Empresa</p>' +
+        link('empresa.html?aba=indicados', 'Indicados nos arredores', 'Raio da vaga, distância aproximada e aviso para ampliar.', 'users') +
+        link('candidatos.html?vaga=atendente', 'Candidatos e resposta em 7 dias', 'Prazo, seleção em lote e mensagem padrão.', 'clipboard') +
+        link('vagas.html', 'Minhas vagas', 'Pausar, editar, cancelar, destacar.', 'briefcase') +
+        link('planos.html', 'Planos e período grátis', 'Essencial, opções avulsas e fim do período.', 'star') +
+        '<p class="sub-h">Profissional</p>' +
+        link('profissional.html', 'Confirmar a contratação', 'O combinado registrado pela empresa.', 'check') +
+        link('buscar.html?como=profissional', 'Buscar vagas', 'Filtros de localização e mais filtros.', 'search') +
+        link('candidaturas.html', 'Minhas candidaturas', 'Linha do tempo, retirar, "Fui contratado".', 'clipboard') +
+        link('avaliar-empresa.html?id=loja-central', 'Avaliar uma empresa', 'Avaliação cega com o combinado como referência.', 'star') + '</section>' +
+
+      '<section class="login-card" aria-labelledby="h-instalar"><h2 class="card-title" id="h-instalar">Instalar no celular</h2>' +
+        '<p class="row-sub">Com o app instalado, o KORbuild Match abre em tela cheia, com ícone na tela inicial, e funciona mesmo com a internet fraca.</p>' +
+        '<div id="instalar-area">' + instalarHtml() + '</div></section>' +
+
+      '<section class="login-card"><h2 class="card-title">Recomeçar do zero</h2>' +
+        '<p class="row-sub">Apaga o que foi feito nesta demonstração (candidaturas, conversas, avaliações) e volta aos dados de exemplo. Use antes de cada sessão de teste.</p>' +
+        '<button type="button" class="btn btn-outline" id="demo-reset">Recomeçar a demonstração</button></section>' +
+      '<p class="login-foot">Dúvidas sobre o protótipo? Veja o <a href="https://github.com/Nardacci/KORbuildMatch#readme">README</a>.</p>';
+
+    function ligarInstalar() {
+      var b = $('#instalar-btn');
+      if (!b) return;
+      b.addEventListener('click', function () {
+        pedidoInstalar.prompt();
+        pedidoInstalar.userChoice.then(function () { pedidoInstalar = null; $('#instalar-area').innerHTML = instalarHtml(); });
+      });
+    }
+    ligarInstalar();
+    document.addEventListener('pode-instalar', function () { $('#instalar-area').innerHTML = instalarHtml(); ligarInstalar(); });
+
+    $('#demo-reset').addEventListener('click', function () {
+      try { [KEY, KEY_P, KEY_CHAT, KEY_REP, KEY_NOTIF].forEach(function (k) { window.sessionStorage.removeItem(k); }); } catch (err) { /* ignora */ }
+      toast('Demonstração recomeçada. Tudo voltou aos dados de exemplo.');
+    });
+  }
+
   /* ---------- Cadastro de conta (seção 17) ---------- */
 
   var EMAIL_GRATIS = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.com.br', 'icloud.com', 'live.com', 'bol.com.br', 'uol.com.br'];
@@ -4820,7 +4898,8 @@
     notificacoes: renderNotificacoes,
     planos: renderPlanos,
     cadastro: renderCadastro,
-    registrar: renderRegistrar
+    registrar: renderRegistrar,
+    demo: renderDemo
   };
   if (PAGES[page]) PAGES[page]();
 })();
