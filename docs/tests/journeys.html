@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (68 passos, ~297 verificações).
+  KORbuild Match — testes automatizados (74 passos, ~327 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -19,6 +19,8 @@
     H — Conexões: convite visível, salvar profissional e recontratação
     I — Reputação: responder, denunciar, privacidade por vínculo e resposta à contestação
     J — Notificações: sino com não lidas, tela de notificações e preferências de canal
+    K — Modelo de negócio: planos, fim do período grátis, limite de vagas e destaque
+    L — Filtros restantes da busca e ajuda da IA para redigir vaga e perfil
 -->
 <meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
 <iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
@@ -366,8 +368,9 @@ var steps = [
     L(/Tem disponibilidade para trabalhar aos finais de semana/.test(txt('.summary')), 'publicar: resumo mostra a pergunta');
   },
   // 2: pergunta multipla escolha com poucas opcoes e termo proibido numa opcao
+  // (sessão nova: o plano Essencial permite até 3 vagas ativas e o passo anterior já publicou uma)
   async function () {
-    await go('publicar-vaga.html');
+    await fresh(); await go('publicar-vaga.html');
     $('#triagem-add').click();
     set('#triagem-0-texto', 'Qual seu nível de experiência com atendimento?');
     pick('triagem-0-tipo', 'multipla');
@@ -734,7 +737,7 @@ var steps = [
   // G1: prazo de 7 dias vencido: lembrete para a empresa
   async function () {
     await fresh(); await go('empresa.html');
-    L(/candidato esperando resposta há mais de 7 dias/.test(txt('.content')), 'home empresa: lembrete de prazo vencido');
+    L(/candidatos? esperando resposta há mais de 7 dias/.test(txt('.content')), 'home empresa: lembrete de prazo vencido');
     await go('candidatos.html?vaga=atendente&status=novo');
     var th = $$('#cand-list article').filter(function (a) { return /Thiago Pereira/.test(a.textContent); })[0];
     L(!!th && /Prazo vencido em 25\/09/.test(th.textContent), 'candidatos: chip de prazo vencido');
@@ -924,6 +927,102 @@ var steps = [
     $('#seguir').click();
     await go('notificacoes.html?como=profissional');
     L(/Loja Central, que você segue, tem vaga aberta/.test(txt('#notif-list')), 'notificações: empresa seguida com vaga aberta');
+  },
+
+  /* ===== BLOCO K — Modelo de negócio (seção 16) ===== */
+
+  // K1: tela de planos, regras de integridade e aviso de fim do período
+  async function () {
+    await fresh(); await go('minha-empresa.html');
+    await clickNav(linkByText('Ver planos e opções avulsas'));
+    L(txt('.topbar-title') === 'Planos' && /Período grátis · \d+ dias? restantes?/.test(txt('#plano-status')), 'planos: status do período grátis: ' + txt('#plano-status'));
+    L(/US\$ 79,00\/mês/.test(txt('#plano-essencial')) && /Até 3 vagas ativas/.test(txt('#plano-essencial')) && /30 convites/.test(txt('#plano-essencial')), 'planos: Essencial e o que inclui');
+    L(/Vaga avulsa/.test(txt('.content')) && /Destaque de vaga/.test(txt('.content')) && /Preço em definição/.test(txt('.content')), 'planos: opções avulsas com preço pendente');
+    L(/Reputação não se compra/.test(txt('.content')) && /profissional nunca paga/.test(txt('.content')), 'planos: regras de integridade');
+    $('[data-plano="ver-aviso"]').click();
+    L(/Faltam 7 dias/.test(txt('#aviso-fim')) && /candidaturas/.test(txt('#aviso-fim')) && /não são apagadas/.test(txt('#aviso-fim')), 'planos: aviso antes do fim com o resumo');
+    L(!hasHScroll(), 'planos: sem rolagem horizontal');
+    L(btnH().length === 0, 'planos: botoes 40px ' + JSON.stringify(btnH()));
+  },
+  // K2: fim do período: vagas pausadas (não apagadas) até escolher; assinar reativa
+  async function () {
+    $('[data-plano="encerrar"]').click();
+    await go('vagas.html');
+    L(!!$('#plano-aviso') && /Abertas · 0\|Pausadas · 3/.test($$('#vagas-filter button').map(function (b) { return b.textContent; }).join('|')), 'fim do período: vagas abertas pausadas');
+    await go('empresa.html');
+    L(/Seu período grátis terminou/.test(txt('.content')), 'fim do período: aviso na tela inicial');
+    await go('buscar.html?como=profissional');
+    L(txt('#busca-count') === '6 vagas encontradas', 'fim do período: vagas pausadas somem para o profissional: ' + txt('#busca-count'));
+    await go('planos.html');
+    $('[data-plano="assinar"]').click();
+    L(/nada é cobrado/.test(txt('#assinar-box')), 'assinar: simulação sem cobrança');
+    $('[data-plano="confirmar-assinatura"]').click();
+    L(/Plano Essencial ativo/.test(txt('#plano-status')), 'assinar: plano ativo');
+    await go('vagas.html');
+    L(/Abertas · 2/.test(txt('#vagas-filter')), 'assinar: vagas voltam a ficar abertas');
+  },
+  // K3: limite de 3 vagas ativas; vaga avulsa libera mais uma
+  async function () {
+    async function publicar(t) {
+      await go('publicar-vaga.html');
+      set('#titulo', t); set('#descricao', 'Atendimento no caixa e organização da loja.');
+      pick('modelo', 'presencial'); set('#pais', 'Brasil'); set('#cidade', 'São Paulo'); set('#tipo', 'Tempo integral');
+      submit('#vaga-form');
+    }
+    await publicar('Operador de caixa I');
+    L(txt('#done-title') === 'Vaga publicada', 'limite: 3ª vaga ativa publicada');
+    await publicar('Operador de caixa II');
+    L(/até 3 vagas ativas/.test(txt('#form-status')), 'limite: 4ª vaga bloqueada: ' + txt('#form-status'));
+    await go('planos.html');
+    $('[data-plano="avulsa"]').click();
+    L(/subiu para 4/.test(txt('.content')), 'vaga avulsa: limite sobe para 4');
+    await publicar('Operador de caixa II');
+    L(txt('#done-title') === 'Vaga publicada', 'vaga avulsa: 4ª vaga publicada');
+  },
+  // K4: destaque de vaga: selo "Patrocinada" e topo da busca do profissional
+  async function () {
+    await fresh(); await go('vagas.html?grupo=abertas');
+    $('[data-acao="destacar"][data-id="atendente"]').click();
+    L(/não fura a regra de reputação/.test(txt('#destaque-box')), 'destaque: explica a regra de reputação');
+    $('[data-acao="confirmar-destaque"]').click();
+    L(/Patrocinada até/.test(txt('[data-vaga-card="atendente"]')), 'destaque: selo na vaga');
+    await go('buscar.html?como=profissional');
+    var primeiro = $('#busca-list article');
+    L(/Atendente de loja/.test(primeiro.textContent) && /Empresa Exemplo/.test(primeiro.textContent) && /Patrocinada/.test(primeiro.textContent), 'destaque: vaga patrocinada no topo da busca');
+  },
+
+  /* ===== BLOCO L — Filtros restantes (seção 10) e ajuda da IA (seção 12) ===== */
+
+  // L1: mais filtros na busca de vagas e de profissionais
+  async function () {
+    await fresh(); await go('buscar.html?como=profissional');
+    set('#f-idioma', 'Inglês');
+    L(txt('#busca-count') === '5 vagas encontradas' && txt('#acc-mais-sum') === '1 filtro ativo', 'filtro idioma: ' + txt('#busca-count'));
+    set('#f-idioma', ''); set('#f-sal-valor', '2500');
+    L(txt('#busca-count') === '3 vagas encontradas', 'filtro salário (R$ 2.500 por mês): ' + txt('#busca-count'));
+    set('#f-sal-valor', ''); set('#f-area', 'Hotelaria');
+    L(txt('#busca-count') === '3 vagas encontradas', 'filtro área: ' + txt('#busca-count'));
+    set('#f-area', ''); $('input[name="f-tipo"][value="Meio período"]').click();
+    L(txt('#busca-count') === '2 vagas encontradas', 'filtro tipo de contratação: ' + txt('#busca-count'));
+    $('#f-limpar').click();
+    L(txt('#busca-count') === '8 vagas encontradas', 'limpar inclui os novos filtros');
+    await go('buscar.html?como=empresa');
+    set('#f-rep', '4.8');
+    L(txt('#busca-count') === '5 profissionais encontrados' && !/Lucas Teixeira/.test(txt('#busca-list')), 'filtro reputação mínima (novos não entram): ' + txt('#busca-count'));
+  },
+  // L2: ajuda da IA para redigir a vaga, com motivo, sem temas proibidos
+  async function () {
+    await go('publicar-vaga.html');
+    set('#ia-texto', 'Recepcionista para clínica, seg a sex 8h às 17h, inglês básico, até 30 anos');
+    $('#ia-gerar').click();
+    L(/Sugestão da IA/.test(txt('#ia-resultado')) && /Por quê:/.test(txt('#ia-resultado')), 'IA: sugestão com o motivo');
+    L(/Ignoramos: idade/.test(txt('#ia-proibidos')) && !/30 anos/.test(txt('#ia-resultado').replace(/Ignoramos.*/, '')), 'IA: tema proibido ignorado');
+    $('#ia-usar').click();
+    L($('#titulo').value === 'Recepcionista' && /clínica/.test($('#descricao').value) && /Agenda e telefonia/.test(txt('#competencias-list')), 'IA: sugestão preenche o formulário');
+    await go('perfil.html');
+    $('#editar-perfil').click();
+    $('#pf-ia').click();
+    L(/experiência verificada como atendente e recepcionista/.test($('#pf-apres').value) && /Revise antes de salvar/.test(txt('#pf-ia-motivo')), 'IA: sugestão de apresentação no perfil');
   }
 ];
 (async function () {

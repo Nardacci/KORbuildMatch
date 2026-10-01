@@ -23,6 +23,7 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | `vagas.html` | Empresa: minhas vagas por estado (Abertas, Pausadas, Rascunhos, Encerradas) |
 | `minha-empresa.html` | Empresa: dados da empresa, plano Essencial, reputação e vagas preenchidas |
 | `perfil.html` | Profissional: meu perfil (ver, editar e privacidade) |
+| `planos.html` | Empresa: plano Essencial, opções avulsas e simulação do fim do período grátis |
 | `notificacoes.html?como=empresa\|profissional` | As duas jornadas: notificações e preferências de canal |
 | `buscar.html?como=empresa\|profissional` | Busca com filtros de localização opcionais (empresa busca profissionais; profissional busca vagas) |
 
@@ -112,6 +113,18 @@ Notificações (seção 11):
 - As notificações vêm do que acontece na demonstração. Empresa: novas mensagens, candidatos novos, prazo de resposta vencido, candidatura retirada, confirmação, contestação ou recusa da contratação e avaliação pendente. Profissional: convites, pedido de confirmação (e a resposta da empresa à contestação), mudanças nas candidaturas, candidatura sem resposta, vagas compatíveis, empresas seguidas com vaga aberta, mensagens e prazo de avaliação.
 - **Como receber**: para cada tipo de aviso, ligar ou desligar no app (push) e por e-mail. Nada é enviado de verdade.
 
+Modelo de negócio (seção 16):
+
+- **Planos** (`planos.html`, a partir de "Minha empresa"): status do período grátis, o Essencial (US$ 79,00/mês, o que inclui), as opções avulsas (vaga avulsa e destaque, com preço ainda em definição) e as regras que não mudam (contratar e avaliar são grátis, reputação não se compra, destaque não fura a regra de reputação, profissional nunca paga). Assinar é simulado: nada é cobrado.
+- **Até 3 vagas ativas**: publicar ou reabrir uma 4ª vaga é bloqueado com o motivo; cada vaga avulsa libera mais uma.
+- **Fim do período grátis** (simulado na tela de planos): o aviso de 7 dias antes, com o resumo do que a empresa conseguiu, e o fim do período, que pausa as vagas abertas sem apagá-las até a empresa assinar. As vagas pausadas somem para o profissional.
+- **Destaque de vaga**: em "Minhas vagas", "Destacar" põe o selo "Patrocinada" por 30 dias; a vaga vem primeiro na busca e nas indicações do profissional.
+
+Busca: mais filtros e ajuda da IA (seções 10 e 12):
+
+- **Mais filtros** (opcionais): tipo de contratação, idioma e reputação mínima nas duas buscas; salário a partir de um valor (mesma moeda e período) e área na busca de vagas. Quem ainda não tem avaliações não entra quando a reputação mínima está ligada.
+- **Redigir com ajuda da IA** (`publicar-vaga.html`): a partir de uma descrição curta, sugere título, descrição e competências, mostra o motivo de cada sugestão e ignora temas proibidos (por exemplo, "até 30 anos" vira "Ignoramos: idade"). Em "Meu perfil", "Sugerir com IA" escreve a apresentação a partir das experiências verificadas. **No protótipo, a IA é simulada** com regras simples; nada sai do navegador.
+
 Identidade visual (modelo C · marca forte):
 
 - Topo escuro (azul-marinho) em todas as telas, com o verde-limão como cor de destaque e botões principais em azul-marinho.
@@ -121,7 +134,7 @@ Identidade visual (modelo C · marca forte):
 
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (68 passos, ~297 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (74 passos, ~327 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -145,7 +158,7 @@ preencher-vaga.html, avaliar-profissional.html
 vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
 mensagens.html, conversa.html
 buscar.html               busca com filtros de localização (as duas jornadas)
-vagas.html, minha-empresa.html, perfil.html, notificacoes.html
+vagas.html, minha-empresa.html, perfil.html, notificacoes.html, planos.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
@@ -172,4 +185,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20260930-7`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-1`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
