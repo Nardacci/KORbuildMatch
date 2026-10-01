@@ -222,6 +222,8 @@
     s.planoFase = s.planoFase || null;   // null (período grátis) | 'encerrado' (vagas pausadas) | 'assinado'
     s.avulsas = s.avulsas || 0;          // vagas avulsas compradas (cada uma libera mais uma vaga ativa)
     s.destaques = s.destaques || {};     // vagaId -> data ISO em que o destaque ("Patrocinada") termina
+    s.contestaRecusa = s.contestaRecusa || {}; // vagaId -> texto (a empresa contestou a recusa do vínculo)
+    s.notas = s.notas || {};             // profId -> { texto, quando } (anotações internas, só a empresa vê)
     if (!s.salvos) {                     // profId -> true (talentos salvos; começa com os do mock)
       s.salvos = {};
       E().salvos.forEach(function (id) { s.salvos[id] = true; });
@@ -250,6 +252,7 @@
     s.retiradas = s.retiradas || {};       // candidaturaId (ou vagaId) -> data em que o João retirou a candidatura
     s.convitesVistos = s.convitesVistos || {}; // conviteId -> true ("Agora não")
     s.vinculosOcultos = s.vinculosOcultos || {}; // índice da experiência verificada -> true (nome da empresa oculto)
+    s.registros = s.registros || {};       // empresaId -> { comb, vagaTitulo, status, contestacao } (contratação registrada pelo João)
     return s;
   }
 
@@ -1168,6 +1171,110 @@
     update();
   }
 
+  /* ---------- Cadastro de conta (seção 17) ---------- */
+
+  var EMAIL_GRATIS = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.com.br', 'icloud.com', 'live.com', 'bol.com.br', 'uol.com.br'];
+
+  function renderCadastro() {
+    var role = params.get('como') === 'empresa' ? 'empresa' : 'profissional';
+    var root = $('#cadastro');
+
+    function paint() {
+      var ehEmpresa = role === 'empresa';
+      root.innerHTML =
+        '<div class="login-top"><div class="brand">' + brandMark(true) + '<div class="brand-name" style="font-size:18px">KORbuild <span>Match</span></div></div>' +
+          '<a href="index.html" class="lang-btn" style="display:inline-flex;align-items:center;text-decoration:none">Entrar</a></div>' +
+        '<div class="hero"><h1>Criar conta grátis</h1>' +
+          '<p>' + (ehEmpresa ? 'Sua empresa ganha 3 meses do plano Essencial, contados a partir da primeira vaga publicada. O cartão só é pedido no fim.'
+            : 'O profissional nunca paga. Seu histórico verificado acompanha você em cada nova oportunidade.') + '</p></div>' +
+        '<form class="login-card form" id="cad-form" novalidate>' +
+          '<div class="field"><span class="field-label" id="cad-role-label">Criar conta como</span>' +
+            '<div class="segmented" role="group" aria-labelledby="cad-role-label">' +
+              '<button type="button" data-cad-role="profissional" aria-pressed="' + !ehEmpresa + '">Profissional</button>' +
+              '<button type="button" data-cad-role="empresa" aria-pressed="' + ehEmpresa + '">Empresa</button></div></div>' +
+          (ehEmpresa
+            ? field('cad-nome', 'Nome da empresa', 'input', 'type="text" maxlength="80" autocomplete="organization"', '', { req: true }) +
+              field('cad-email', 'E-mail da empresa', 'input', 'type="email" autocomplete="email" placeholder="voce@suaempresa.com"', '', { req: true, hint: 'Com o domínio da empresa, a verificação fica mais rápida.' }) +
+              field('cad-pais', 'País', 'select', '', options(E().formulario.paises, 'Selecione'), { req: true }) +
+              field('cad-setor', 'Setor', 'input', 'type="text" maxlength="60" placeholder="Ex.: Varejo"', '', { req: true })
+            : field('cad-nome', 'Nome completo', 'input', 'type="text" maxlength="80" autocomplete="name"', '', { req: true }) +
+              field('cad-email', 'E-mail', 'input', 'type="email" autocomplete="email" placeholder="voce@email.com"', '', { req: true }) +
+              field('cad-cidade', 'Cidade onde mora', 'select', '', opcoesCidades(), { req: true, hint: 'Só a cidade aparece para as empresas, nunca o endereço.' }) +
+              field('cad-titulo', 'O que você faz (opcional)', 'input', 'type="text" maxlength="60" placeholder="Ex.: Recepcionista"', '')) +
+          field('cad-senha', 'Senha', 'input', 'type="password" autocomplete="new-password"', '', { req: true, hint: 'Pelo menos 8 caracteres.' }) +
+          '<div class="field" id="f-cad-termos"><label class="check-row"><input type="checkbox" id="cad-termos" data-ctl aria-describedby="cad-termos-err">' +
+            '<span>Li e aceito os <a href="#" data-todo="' + TODO + '">Termos de uso</a> e a <a href="#" data-todo="' + TODO + '">Política de privacidade</a>.</span></label>' +
+            '<p class="field-error" id="cad-termos-err" hidden></p></div>' +
+          '<p class="note">' + icon('check', 16, { stroke: 2.4 }) + '<span>Pedimos só o necessário: nada de idade, gênero, documentos pessoais ou foto no cadastro.</span></p>' +
+          '<p class="form-status" id="form-status" role="alert"></p>' +
+          '<button type="submit" class="btn btn-primary btn-lg">Criar conta</button>' +
+        '</form>' +
+        '<p class="login-foot">Já tem conta? <a href="index.html">Entrar</a></p>';
+
+      root.querySelectorAll('[data-cad-role]').forEach(function (b) {
+        b.addEventListener('click', function () { role = b.getAttribute('data-cad-role'); paint(); });
+      });
+
+      $('#cad-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var email = $('#cad-email').value.trim();
+        var regras = [
+          { id: 'cad-nome', ok: $('#cad-nome').value.trim().length >= 2, msg: ehEmpresa ? 'Informe o nome da empresa.' : 'Informe seu nome.' },
+          { id: 'cad-email', ok: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), msg: 'Informe um e-mail válido.' }
+        ];
+        if (ehEmpresa) {
+          regras.push({ id: 'cad-pais', ok: !!$('#cad-pais').value, msg: 'Selecione o país.' });
+          regras.push({ id: 'cad-setor', ok: $('#cad-setor').value.trim().length >= 2, msg: 'Informe o setor.' });
+        } else {
+          regras.push({ id: 'cad-cidade', ok: !!$('#cad-cidade').value, msg: 'Escolha a cidade onde você mora.' });
+        }
+        regras.push({ id: 'cad-senha', ok: $('#cad-senha').value.length >= 8, msg: 'A senha precisa ter pelo menos 8 caracteres.' });
+        regras.push({ id: 'cad-termos', ok: $('#cad-termos').checked, msg: 'Para criar a conta, aceite os Termos e a Política de privacidade.' });
+        var ok = check(regras);
+        $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
+        if (!ok) return;
+        if (ehEmpresa) verificar($('#cad-nome').value.trim(), email);
+        else concluido('Conta criada', 'Bem-vindo(a), ' + esc($('#cad-nome').value.trim().split(' ')[0]) + '! O próximo passo é completar o perfil: experiências, competências e o trabalho que você procura.', 'profissional');
+      });
+    }
+
+    // Verificação da empresa antes de publicar vagas (seção 8.8): pelo domínio do e-mail ou por documento.
+    function verificar(nome, email) {
+      var dominio = email.split('@')[1].toLowerCase();
+      var porDominio = EMAIL_GRATIS.indexOf(dominio) === -1;
+      root.innerHTML =
+        '<div class="hero"><h1>Verificar a empresa</h1><p>Toda empresa é verificada antes de publicar vagas. Isso protege os profissionais de vagas falsas.</p></div>' +
+        '<form class="login-card form" id="ver-form" novalidate>' +
+          (porDominio
+            ? '<p class="note note-box" id="ver-dominio">' + icon('check', 16, { stroke: 2.4 }) + '<span>Vamos verificar ' + esc(nome) + ' pelo domínio do e-mail (@' + esc(dominio) + '). Você recebe um link de confirmação nesse endereço.</span></p>'
+            : '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>O e-mail @' + esc(dominio) + ' é de uso pessoal. Informe o número de registro da empresa para a verificação.</span></p>' +
+              field('ver-doc', 'Número de registro da empresa', 'input', 'type="text" maxlength="30" placeholder="Ex.: CNPJ, EIN…"', '', { req: true })) +
+          '<p class="form-status" id="form-status" role="alert"></p>' +
+          '<button type="submit" class="btn btn-primary btn-lg">Enviar para verificação</button></form>';
+      $('#ver-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (!porDominio && !check([{ id: 'ver-doc', ok: $('#ver-doc').value.trim().length >= 5, msg: 'Informe o número de registro.' }])) return;
+        concluido('Conta criada · verificação em análise',
+          'Você já pode montar a primeira vaga; ela é publicada assim que a verificação terminar. Os 3 meses grátis do Essencial começam quando a primeira vaga for publicada.', 'empresa');
+      });
+    }
+
+    function concluido(titulo, texto, como) {
+      root.innerHTML = '<div class="login-card done-card"><div class="icon-tile lg blue">' + icon('check', 30, { stroke: 2 }) + '</div>' +
+        '<h1 class="page-title" id="cad-done" tabindex="-1">' + esc(titulo) + '</h1><p class="row-sub">' + texto + '</p>' +
+        '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>Protótipo: nenhuma conta é criada de verdade. A demonstração segue com ' +
+          (como === 'empresa' ? 'a Empresa Exemplo' : 'o perfil de exemplo do João Silva') + '.</span></p>' +
+        '<button type="button" class="btn btn-primary btn-lg" id="cad-entrar">Entrar na demonstração</button></div>';
+      $('#cad-done').focus();
+      $('#cad-entrar').addEventListener('click', function () {
+        try { [KEY, KEY_P, KEY_CHAT, KEY_REP, KEY_NOTIF].forEach(function (k) { window.sessionStorage.removeItem(k); }); } catch (err) { /* ignora */ }
+        window.location.href = como === 'empresa' ? 'empresa.html' : 'profissional.html';
+      });
+    }
+
+    paint();
+  }
+
   /* ---------- Empresa: início ---------- */
 
   function renderEmpresa() {
@@ -1204,8 +1311,11 @@
             href: 'preencher-vaga.html?vaga=' + q(p.vaga) + '&revisar=1' });
         }
         if (conf === 'recusado') {
-          return rowStatic({ icone: 'message', tom: 'amber', titulo: 'Contratação recusada por ' + prof(PR_ID).nome,
-            texto: 'Vaga de ' + v.titulo + ' · escolha outra pessoa em Minhas vagas.' });
+          if (s.contestaRecusa[p.vaga]) return rowStatic({ icone: 'message', tom: 'amber', titulo: 'Contratação recusada por ' + prof(PR_ID).nome,
+            texto: 'Vaga de ' + v.titulo + ' · você contestou a recusa; a moderação está analisando.' });
+          return rowLink({ icone: 'message', tom: 'amber', titulo: 'Contratação recusada por ' + prof(PR_ID).nome,
+            texto: 'Vaga de ' + v.titulo + ' · escolha outra pessoa em Minhas vagas, ou conteste se ele foi contratado.',
+            href: 'preencher-vaga.html?vaga=' + q(p.vaga) + '&contestar=1' });
         }
         if (preench(s, p.vaga)) {
           return rowStatic({ icone: 'clock', tom: 'amber', titulo: 'Aguardando confirmação de ' + nomesDe(preench(s, p.vaga)),
@@ -1240,6 +1350,13 @@
         if (c.status === 'novo' && c.data && prazoVencido(c.data)) atrasados.push({ v: v, c: c });
       });
     });
+    var regJoao = loadP().registros['empresa-exemplo'];
+    if (regJoao && regJoao.status === 'aguardando') {
+      itens++;
+      pend = rowLink({ icone: 'check', tom: 'blue', titulo: prof(PR_ID).nome + ' registrou uma contratação',
+        texto: regJoao.comb.funcao + ' · confirme se ele foi contratado. O vínculo só conta com a confirmação dos dois.',
+        href: 'perfil-profissional.html?id=' + q(PR_ID) + '&registro=1' }) + pend;
+    }
     var piHome = planoInfo(s);
     if (piHome.fase === 'encerrado' || (!piHome.fase && piHome.dias <= 7)) {
       itens++;
@@ -2188,7 +2305,22 @@
           p.avaliacoes.map(function (a, i) { return avaliacaoHtml(a, E().avaliacao.perguntas, 'do profissional', { chave: 'prof:' + id + ':' + i }); }).join(''))
       : '<section class="section"><h2>Avaliações recebidas</h2><p class="row-sub">Ainda não há avaliações publicadas.</p></section>';
 
-    $('#content').innerHTML =
+    var regJ = id === PR_ID ? loadP().registros['empresa-exemplo'] : null;
+    var registroHtml = regJ && params.get('registro')
+      ? '<section class="card card-highlight" id="registro-joao"><h2 class="card-title">' + esc(p.nome) + ' registrou uma contratação</h2>' +
+        (regJ.status === 'aguardando'
+          ? '<p class="row-sub">Confira o combinado. O vínculo só entra no histórico e na reputação se você confirmar.</p>' + combinadoResumoHtml(regJ.comb) +
+            '<div class="btn-row"><button type="button" class="btn btn-primary" data-regemp="confirmado">Confirmar contratação</button>' +
+            '<button type="button" class="btn btn-outline" data-regemp="recusado">Não reconheço</button></div>'
+          : '<p class="row-sub">' + (regJ.status === 'confirmado' ? 'Você confirmou. O vínculo entrou no histórico dos dois.' : 'Você não reconheceu a contratação. ' + esc(firstName(p)) + ' foi avisado e pode contestar.') + '</p>') + '</section>'
+      : '';
+    var nota = s.notas[id];
+    var notasHtml = '<section class="section" aria-labelledby="h-notas"><h2 id="h-notas">Anotações internas</h2><div class="card">' +
+      field('nota-interna', 'Só a sua empresa vê', 'textarea', 'rows="3" maxlength="500" placeholder="Ex.: boa conversa por telefone; disponível a partir de novembro."', esc(nota ? nota.texto : ''),
+        { hint: nota ? 'Salva em ' + dataBR(nota.quando) + '. O profissional não tem acesso.' : 'O profissional não tem acesso às anotações.' }) +
+      '<div class="btn-row"><button type="button" class="btn btn-outline" id="nota-salvar">Salvar anotação</button></div></div></section>';
+
+    $('#content').innerHTML = registroHtml +
       '<section class="card profile-head"><div class="media center"><div class="avatar xl" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</div>' +
         '<div class="row-main"><h2 class="profile-name">' + nomeComSelo(p) + '</h2><div class="row-sub">' + esc(p.resumo) + '</div></div></div>' +
         '<dl class="summary"><div><dt>Localização</dt><dd>' + esc(p.local + (distVaga ? ' · ' + distVaga : '')) + '</dd></div><div><dt>Disponibilidade</dt><dd>' +
@@ -2204,6 +2336,7 @@
         '<a href="' + esc(recontratarHref(id)) + '" class="btn btn-primary">Chamar de novo</a></section>' : '') +
 
       candSection +
+      notasHtml +
 
       (p.apresentacao && visibilidadeDe(p, 'apresentacao') !== 'privado' ? '<section class="section"><h2>Apresentação</h2><div class="card"><p class="prose">' + esc(p.apresentacao) + '</p></div></section>' : '') +
 
@@ -2232,6 +2365,20 @@
         p.formacao.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul></section>' +
 
       avaliacoes;
+
+    $('#nota-salvar').addEventListener('click', function () {
+      var st = load();
+      st.notas[id] = { texto: $('#nota-interna').value.trim(), quando: hojeISO() };
+      save(st);
+      toast('Anotação salva. Só a sua empresa vê.');
+    });
+    $all('[data-regemp]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var sp = loadP(); sp.registros['empresa-exemplo'].status = b.getAttribute('data-regemp'); saveP(sp);
+        toast(b.getAttribute('data-regemp') === 'confirmado' ? 'Contratação confirmada pelos dois lados.' : 'Resposta enviada. ' + firstName(p) + ' pode contestar.');
+        renderPerfil();
+      });
+    });
 
     $('#convidar').addEventListener('click', function () {
       if (!vaga) { toast('Publique uma vaga para poder convidar.'); return; }
@@ -2281,6 +2428,7 @@
 
     var info = vagaInfo(s, v);
     if (params.get('revisar') && confirmacaoDaVaga(v.id) === 'contestado') return renderRevisao();
+    if (params.get('contestar') && confirmacaoDaVaga(v.id) === 'recusado') return renderContestarRecusa();
     if (info.status !== 'Preenchida' && preench(s, v.id)) return aguardando(preench(s, v.id));
 
     if (info.status === 'Preenchida') {
@@ -2291,6 +2439,9 @@
     }
 
     var elegiveis = ordenar(candidatosDe(s, v.id).filter(function (c) { return c.status === 'conversa'; }));
+    // Vindo do "Deu certo?" de uma conversa: a pessoa entra na lista já marcada, mesmo sem ser candidata.
+    var quem = params.get('quem');
+    if (quem && prof(quem) && !elegiveis.some(function (c) { return c.id === quem; })) elegiveis.unshift({ id: quem, atende: requisitosDe(v) - 1, status: 'conversa' });
     var max = v.posicoes || 1;
     var tipo = max > 1 ? 'checkbox' : 'radio';
 
@@ -2313,7 +2464,7 @@
         '<fieldset class="field group" id="f-quem" aria-describedby="quem-err"><legend class="visually-hidden">Candidatos em conversa</legend>' +
           elegiveis.map(function (c) {
             var p = prof(c.id);
-            return '<label class="choice"><input type="' + tipo + '" name="quem" value="' + esc(c.id) + '" class="choice-input">' +
+            return '<label class="choice"><input type="' + tipo + '" name="quem" value="' + esc(c.id) + '" class="choice-input"' + (c.id === quem ? ' checked' : '') + '>' +
               '<span class="choice-body"><span class="avatar lg" style="background:' + esc(p.cor) + '">' + esc(p.iniciais) + '</span>' +
               '<span class="row-main"><span class="row-title" style="display:flex;align-items:center;gap:6px;font-weight:800">' + nomeComSelo(p) + '</span>' +
               '<span class="row-sub">' + esc(p.resumo) + '</span>' +
@@ -2331,6 +2482,26 @@
           : (marcados.length > max ? 'A vaga tem ' + max + ' posições: selecione no máximo ' + max + ' pessoas.' : '');
         if (!check([{ id: 'quem', ok: !msg, msg: msg }])) return;
         renderCombinado(marcados);
+      });
+    }
+
+    // A empresa discorda da recusa do vínculo (seção 8.1: um vínculo recusado pode ser contestado).
+    function renderContestarRecusa() {
+      subTopbar('Contestar a recusa', 'empresa.html');
+      $('#content').innerHTML =
+        '<div class="greeting"><h2 class="page-title">' + esc(prof(PR_ID).nome) + ' disse que não foi contratado</h2><p>Vaga de ' + esc(v.titulo) + '.</p></div>' +
+        '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>Se ele foi contratado, conte o que aconteceu. A moderação analisa usando a conversa e o combinado registrado; até lá, o vínculo não entra no histórico de ninguém.</span></p>' +
+        '<form id="contest-form" class="form" novalidate>' +
+          field('contest-texto', 'Por que você discorda?', 'textarea', 'rows="4" maxlength="300"', '', { req: true }) +
+          '<div class="btn-row form-actions"><button type="submit" class="btn btn-primary">Enviar contestação</button><a href="empresa.html" class="btn btn-outline">Cancelar</a></div></form>';
+      $('#contest-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var t = $('#contest-texto').value.trim();
+        if (!check([{ id: 'contest-texto', ok: t.length > 0, msg: 'Conte por que você discorda.' }])) return;
+        var st = load(); st.contestaRecusa[v.id] = t; save(st);
+        showDone({ icone: 'message', tom: 'amber', titulo: 'Contestação enviada',
+          texto: 'A moderação analisa o caso. ' + esc(firstName(prof(PR_ID))) + ' vê a sua contestação, e o vínculo só entra no histórico se a contratação for confirmada.',
+          acoes: '<a href="empresa.html" class="btn btn-primary">Voltar ao início</a>' });
       });
     }
 
@@ -2846,6 +3017,10 @@
       var curriculo = null; // { nome, tamanho } — o arquivo em si nunca é guardado, nem no protótipo.
       var salPadrao = v.salario || { moeda: 'BRL', periodo: 'mes' };
 
+      var faltaPerfil = [];
+      if (!p.competencias || !p.competencias.length) faltaPerfil.push('competencias');
+      if (!p.disponibilidade) faltaPerfil.push('disponibilidade');
+
       // Perguntas de triagem: sempre visíveis e obrigatórias quando a vaga tiver.
       var triagemHtml = (v.perguntasTriagem && v.perguntasTriagem.length)
         ? '<section class="card"><h2 class="card-title">Perguntas da empresa</h2>' +
@@ -2886,7 +3061,16 @@
         '<div class="greeting"><h2 class="page-title">Confirmar candidatura</h2>' +
           '<p>Você está se candidatando a ' + esc(v.titulo) + ' em ' + esc(e.nome) + '. Vamos usar o perfil que você já preencheu.</p></div>' +
 
+        // Perfil mínimo (seção 7.1): se faltar algo essencial, pede aqui mesmo, sem sair da vaga.
+        (faltaPerfil.length ? '<section class="card card-warn" id="perfil-minimo"><h2 class="card-title">Complete seu perfil para se candidatar</h2>' +
+          '<p class="row-sub">Falta pouco. O que você preencher aqui também fica salvo no seu perfil.</p>' +
+          (faltaPerfil.indexOf('competencias') !== -1 ? field('min-comp', 'Suas principais competências', 'input', 'type="text" maxlength="120" placeholder="Ex.: Atendimento ao público, Pacote Office"', '', { req: true, hint: 'Separe por vírgulas.' }) : '') +
+          (faltaPerfil.indexOf('disponibilidade') !== -1 ? field('min-disp', 'Disponibilidade', 'select', '', options(DISPONIBILIDADES, 'Selecione'), { req: true }) : '') +
+          '</section>' : '') +
         triagemHtml +
+        // Aviso de baixa compatibilidade (seção 7.1): avisa, mas não bloqueia.
+        (c.atende / c.total < 0.7 ? '<p class="note note-box" id="baixa-compat">' + icon('eye', 16, { stroke: 2 }) + '<span>Você atende ' + c.atende + ' de ' + c.total +
+          ' requisitos (falta: ' + esc(c.faltam.join(', ')) + '). Você pode se candidatar mesmo assim.</span></p>' : '') +
 
         '<section class="card"><h2 class="card-title">O que será enviado</h2>' +
           '<dl class="summary"><div><dt>Nome</dt><dd>' + esc(p.nome) + '</dd></div>' +
@@ -2962,9 +3146,19 @@
             regras.push({ id: 'triagem-resp-' + i, ok: !!marcado, msg: 'Responda: ' + pg.texto });
           });
         }
+        if (faltaPerfil.indexOf('competencias') !== -1) regras.unshift({ id: 'min-comp', ok: $('#min-comp').value.trim().length >= 3, msg: 'Informe pelo menos uma competência.' });
+        if (faltaPerfil.indexOf('disponibilidade') !== -1) regras.unshift({ id: 'min-disp', ok: !!$('#min-disp').value, msg: 'Escolha sua disponibilidade.' });
         var ok = check(regras);
-        $('#form-status').textContent = ok ? '' : 'Responda as perguntas da empresa antes de enviar.';
+        $('#form-status').textContent = ok ? '' : (faltaPerfil.length ? 'Complete o perfil e responda as perguntas antes de enviar.' : 'Responda as perguntas da empresa antes de enviar.');
         if (!ok) return;
+        if (faltaPerfil.length) {
+          var spf = loadP();
+          spf.perfil = spf.perfil || {};
+          if ($('#min-comp')) spf.perfil.competencias = $('#min-comp').value.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+          if ($('#min-disp')) spf.perfil.disponibilidade = $('#min-disp').value;
+          saveP(spf);
+          aplicarEdicoes();
+        }
 
         var pretVal = $('#pret-valor').value;
         var pretensao = pretVal ? { valor: Number(pretVal), moeda: $('#pret-moeda').value, periodo: $('#pret-periodo').value } : null;
@@ -2987,6 +3181,57 @@
     }
 
     paint();
+  }
+
+  /* ---------- Profissional: registrar uma contratação (seção 8.1: qualquer um dos dois pode iniciar) ---------- */
+
+  function renderRegistrar() {
+    var eid = params.get('empresa') || '', e = empresaDe(eid);
+    subTopbar('Registrar contratação', 'candidaturas.html');
+    $('#nav').innerHTML = profNav('candidaturas');
+    if (!e) return notFound('Não encontramos essa empresa.', 'candidaturas.html');
+    var f = E().formulario;
+    $('#content').innerHTML =
+      '<form id="reg-form" class="form" novalidate><div class="greeting"><h2 class="page-title">Você foi contratado por ' + esc(e.nome) + '?</h2>' +
+        '<p>Registre o que foi combinado. ' + esc(e.nome) + ' recebe um pedido de confirmação; o vínculo só entra no histórico e na reputação depois que a empresa confirmar.</p></div>' +
+        field('funcao', 'Função', 'input', 'type="text" maxlength="60" autocomplete="off" value="' + esc(params.get('vaga') || '') + '"', '', { req: true }) +
+        group('tipo-contratacao', 'Tipo de contratação', pills('tipo-contratacao', f.tipos.map(function (t) { return { id: t, rotulo: t }; })), { req: true }) +
+        group('salario2', 'Salário combinado',
+          '<div class="form-grid">' +
+            '<label class="mini"><span>Moeda</span><select id="moeda2">' + options(f.moedas) + '</select></label>' +
+            '<label class="mini"><span>Período</span><select id="periodo2">' + options(f.periodos) + '</select></label>' +
+            '<label class="mini"><span>Valor</span><input id="valor2" data-ctl type="number" inputmode="decimal" min="0" step="any" placeholder="0" aria-describedby="salario2-err"></label>' +
+          '</div>', { req: true }) +
+        field('data-inicio', 'Data de início', 'input', 'type="date"', '', { req: true }) +
+        field('jornada', 'Jornada / horário', 'input', 'type="text" maxlength="80" autocomplete="off" placeholder="Ex.: Seg a sex, 9h às 18h"', '', { req: true }) +
+        '<p class="form-status" id="form-status" role="alert"></p>' +
+        '<div class="btn-row form-actions"><button type="submit" class="btn btn-primary">Enviar para a empresa confirmar</button>' +
+          '<a href="candidaturas.html" class="btn btn-outline">Cancelar</a></div>' +
+        '<div class="visually-hidden" role="status" id="live"></div></form>';
+    $('#periodo2').value = 'mes';
+    $('#reg-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var tipoSel = document.querySelector('input[name="tipo-contratacao"]:checked'), valor = $('#valor2').value;
+      var ok = check([
+        { id: 'funcao', ok: $('#funcao').value.trim().length > 0, msg: 'Informe a função.' },
+        { id: 'tipo-contratacao', ok: !!tipoSel, msg: 'Escolha o tipo de contratação.' },
+        { id: 'salario2', ok: !!valor && Number(valor) > 0, msg: 'Informe o valor do salário combinado.' },
+        { id: 'data-inicio', ok: !!$('#data-inicio').value, msg: 'Informe a data de início.' },
+        { id: 'jornada', ok: $('#jornada').value.trim().length > 0, msg: 'Informe a jornada ou horário combinado.' }
+      ]);
+      $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
+      if (!ok) return;
+      var sp = loadP();
+      sp.registros[eid] = {
+        comb: { funcao: $('#funcao').value.trim(), tipoContratacao: tipoSel.value, moeda: $('#moeda2').value, periodo: $('#periodo2').value,
+          valor: Number(valor), dataInicio: $('#data-inicio').value, jornada: $('#jornada').value.trim() },
+        vagaTitulo: params.get('vaga') || '', status: 'aguardando', data: hojeISO()
+      };
+      saveP(sp);
+      showDone({ icone: 'clock', tom: 'amber', titulo: 'Pedido enviado para ' + e.nome,
+        texto: 'Quando ' + esc(e.nome) + ' confirmar, a contratação entra no seu histórico verificado. Se a empresa não reconhecer, você pode contestar.',
+        acoes: '<a href="candidaturas.html?status=contratado" class="btn btn-primary">Ver minhas candidaturas</a>' });
+    });
   }
 
   /* ---------- Profissional: minhas candidaturas ---------- */
@@ -3031,6 +3276,9 @@
       var r = {};
       Object.keys(c).forEach(function (k) { r[k] = c[k]; });
       if (sp.retiradas[c.id] && !c.confirmar) { r.alcancou = c.status; r.status = 'retirada'; }
+      // O João registrou a contratação (seção 8.1: qualquer um dos dois pode iniciar; o outro confirma).
+      var reg = sp.registros[c.empresa];
+      if (reg && !c.confirmar && GRUPO[r.status] === 'andamento') { r.status = 'contratado'; r.registro = reg; }
       if (c.vaga === 'recepcionista-exemplo') {
         var vagaIdEmp = PR().confirmacao.vagaId;
         if (sp.confirmacao === 'recusado') {
@@ -3062,11 +3310,36 @@
     }).join('') + '</ol>';
   }
 
-  function candidaturaCard(sp, c, retirando) {
+  function candidaturaCard(sp, c, retirando, contestandoReg) {
     var texto, chip, acoesHtml = '';
     var emAndamento = (c.status === 'enviada' || c.status === 'visualizada' || c.status === 'conversa') && !c.confirmar;
     var btnRetirar = emAndamento ? '<button type="button" class="btn btn-outline" data-retirar="' + esc(c.id) + '">Retirar candidatura</button>' : '';
-    if (c.status === 'contratado') {
+    if (c.status === 'contratado' && c.registro) {
+      var rg = c.registro, en = empresaDe(c.empresa).nome, simular = c.empresa !== 'empresa-exemplo';
+      if (rg.status === 'aguardando') {
+        texto = 'Contratado · aguardando a empresa'; chip = 'amber';
+        acoesHtml = '<p class="row-sub">Você registrou a contratação. O vínculo só entra no histórico depois que ' + esc(en) + ' confirmar.</p>' + combinadoResumoHtml(rg.comb) +
+          (simular ? '<p class="row-sub">Protótipo: ' + esc(en) + ' não é navegável. Simule a resposta da empresa:</p>' +
+            '<div class="btn-row"><button type="button" class="btn btn-outline" data-reg="confirmar" data-emp="' + esc(c.empresa) + '">Empresa confirma</button>' +
+            '<button type="button" class="btn btn-outline" data-reg="recusar" data-emp="' + esc(c.empresa) + '">Empresa não reconhece</button></div>' : '');
+      } else if (rg.status === 'confirmado') {
+        texto = 'Contratado · confirmado'; chip = 'green';
+        acoesHtml = '<p class="row-sub">' + esc(en) + ' confirmou. O vínculo entrou no histórico verificado dos dois.</p>';
+      } else if (rg.status === 'contestado') {
+        texto = 'Contestação em análise'; chip = 'amber';
+        acoesHtml = '<p class="row-sub">Você contestou: “' + esc(rg.contestacao) + '”. A moderação analisa usando a conversa e o combinado; até lá, o vínculo não entra no histórico.</p>';
+      } else if (contestandoReg === c.empresa) {
+        texto = 'Contratação não reconhecida'; chip = 'grey';
+        acoesHtml = '<div class="card card-warn" id="contestar-reg">' +
+          field('reg-contest', 'Por que você discorda?', 'textarea', 'rows="3" maxlength="300"', '', { req: true, hint: 'A moderação analisa usando a conversa e o combinado registrado.' }) +
+          '<div class="btn-row"><button type="button" class="btn btn-primary" data-reg="enviar-contestacao" data-emp="' + esc(c.empresa) + '">Enviar contestação</button>' +
+          '<button type="button" class="btn btn-outline" data-reg="voltar">Voltar</button></div></div>';
+      } else {
+        texto = 'Contratação não reconhecida'; chip = 'grey';
+        acoesHtml = '<p class="row-sub">' + esc(en) + ' disse que não houve contratação. Se não for verdade, você pode contestar.</p>' +
+          '<div class="btn-row"><button type="button" class="btn btn-outline" data-reg="contestar" data-emp="' + esc(c.empresa) + '">Contestar</button></div>';
+      }
+    } else if (c.status === 'contratado') {
       if (c.confirmar) {
         if (sp.confirmacao === 'confirmado') {
           texto = 'Contratado · confirmado'; chip = 'green';
@@ -3088,12 +3361,15 @@
       }
     } else if (c.status === 'recusado') {
       texto = 'Não contratado'; chip = 'grey';
-      acoesHtml = '<p class="row-sub">Você avisou que não foi contratado para esta vaga. O vínculo não entrou no seu histórico.</p>';
+      var contRec = load().contestaRecusa[PR().confirmacao.vagaId];
+      acoesHtml = '<p class="row-sub">Você avisou que não foi contratado para esta vaga. O vínculo não entrou no seu histórico.</p>' +
+        (contRec ? '<p class="note note-box" id="recusa-contestada">' + icon('message', 16, { stroke: 2 }) + '<span>A empresa contestou sua resposta: “' + esc(contRec) + '”. A moderação analisa usando a conversa e o combinado.</span></p>' : '');
     } else if (c.status === 'conversa') {
       texto = 'Em conversa'; chip = 'blue';
       var ladoDono = c.empresa === 'empresa-exemplo' ? 'ambos' : 'profissional';
       var convId = chatKey(ladoDono, PR_ID, c.empresa);
-      acoesHtml = '<div class="btn-row"><a href="conversa.html?id=' + q(convId) + '&como=profissional" class="btn btn-outline">Abrir conversa</a>' + btnRetirar + '</div>';
+      acoesHtml = '<div class="btn-row"><a href="conversa.html?id=' + q(convId) + '&como=profissional" class="btn btn-outline">Abrir conversa</a>' +
+        '<a href="registrar-contratacao.html?empresa=' + q(c.empresa) + '&vaga=' + q(c.titulo) + '" class="btn btn-outline">Fui contratado</a>' + btnRetirar + '</div>';
     } else if (c.status === 'enviada' || c.status === 'visualizada') {
       if (c.data && prazoVencido(c.data)) {
         texto = 'Sem resposta no prazo'; chip = 'amber';
@@ -3139,7 +3415,7 @@
     $('#nav').innerHTML = profNav('candidaturas');
 
     var filtro = params.get('status');
-    var retirando = null;
+    var retirando = null, contestandoReg = null;
 
     $('#content').innerHTML =
       '<div class="filter" role="group" aria-label="Filtrar candidaturas" id="cand-filter"></div>' +
@@ -3162,7 +3438,7 @@
 
       var lista = doGrupo(filtro);
       $('#cand-list').innerHTML = lista.length
-        ? lista.map(function (c) { return candidaturaCard(sp, c, retirando); }).join('')
+        ? lista.map(function (c) { return candidaturaCard(sp, c, retirando, contestandoReg); }).join('')
         : '<div class="empty"><p class="row-title">Nenhuma candidatura aqui.</p>' +
           '<p class="row-sub">Veja as vagas indicadas para você e candidate-se.</p>' +
           '<a href="profissional.html?aba=vagas" class="btn btn-primary">Ver vagas indicadas</a></div>';
@@ -3179,6 +3455,25 @@
       if (!b) return;
       filtro = b.getAttribute('data-grupo');
       retirando = null;
+      paint();
+    });
+
+    // Contratação registrada pelo João: resposta simulada da empresa e contestação.
+    $('#cand-list').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-reg]');
+      if (!b) return;
+      var acao = b.getAttribute('data-reg'), emp = b.getAttribute('data-emp'), st = loadP();
+      if (acao === 'confirmar') { st.registros[emp].status = 'confirmado'; toast('A empresa confirmou a contratação (simulação).'); }
+      else if (acao === 'recusar') { st.registros[emp].status = 'recusado'; toast('A empresa não reconheceu a contratação (simulação).'); }
+      else if (acao === 'contestar') { contestandoReg = emp; paint(); return; }
+      else if (acao === 'voltar') { contestandoReg = null; paint(); return; }
+      else if (acao === 'enviar-contestacao') {
+        var t = $('#reg-contest').value.trim();
+        if (!check([{ id: 'reg-contest', ok: t.length > 0, msg: 'Conte por que você discorda.' }])) return;
+        st.registros[emp].status = 'contestado'; st.registros[emp].contestacao = t; contestandoReg = null;
+        toast('Contestação enviada para a moderação.');
+      }
+      saveP(st);
       paint();
     });
 
@@ -3412,7 +3707,34 @@
       }).join('');
     }
 
+    // "Deu certo?" (seção 7.2): depois de liberar o contato, pergunta aos dois lados se houve contratação,
+    // para o vínculo não se perder quando a conversa segue fora da plataforma.
+    function deuCertoHtml() {
+      if (waEstado(cv, como) !== 'liberado' || (cv.deuCerto && cv.deuCerto[como])) return '';
+      var regFeito = como === 'profissional' && loadP().registros[cv.empresaId];
+      if (regFeito) return '<div class="card" id="deu-certo-card"><p class="row-sub">Contratação registrada. O vínculo entra no histórico quando ' + esc(empresaDe(cv.empresaId).nome) + ' confirmar.</p></div>';
+      var href = como === 'empresa'
+        ? (cv.vagaEmpresaId ? 'preencher-vaga.html?vaga=' + q(cv.vagaEmpresaId) + '&quem=' + q(cv.profissionalId) : 'candidatos.html')
+        : 'registrar-contratacao.html?empresa=' + q(cv.empresaId) + '&vaga=' + q(cv.vagaTitulo || '');
+      return '<div class="card card-highlight" id="deu-certo-card"><div class="row-title">Deu certo?</div>' +
+        '<p class="row-sub">' + (como === 'empresa' ? 'Vocês fecharam a contratação de ' + esc(firstName(prof(cv.profissionalId))) + '?' : 'Você foi contratado(a) por ' + esc(empresaDe(cv.empresaId).nome) + '?') +
+        ' Registre aqui para o vínculo entrar no histórico e na reputação dos dois.</p>' +
+        '<div class="btn-row"><a href="' + esc(href) + '" class="btn btn-primary">' + (como === 'empresa' ? 'Sim, registrar contratação' : 'Sim, fui contratado') + '</a>' +
+        '<button type="button" class="btn btn-outline" data-deu-certo="nao">Ainda não</button></div>' +
+        '<p class="row-sub">No produto, esta pergunta chega alguns dias depois de liberar o contato.</p></div>';
+    }
+
+    function denunciaHtml(aberto) {
+      if (cv.denuncia) return '<p class="row-sub den-ok" id="den-conversa">' + icon('eye', 14, { stroke: 2 }) + ' Conversa denunciada · em análise. Conversas abusivas afetam a reputação de quem as enviou.</p>';
+      if (!aberto) return '<div class="btn-row den-row"><button type="button" class="btn btn-outline btn-quiet" data-den-conv="abrir">Denunciar conversa</button></div>';
+      return '<div class="card card-warn" id="den-conversa">' + group('den-conv', 'Por que denunciar esta conversa?',
+          pills('den-conv', [{ id: 'Spam', rotulo: 'Spam' }, { id: 'Golpe ou fraude', rotulo: 'Golpe ou fraude' }, { id: 'Ofensa', rotulo: 'Ofensa' }, { id: 'Outro', rotulo: 'Outro' }]), { req: true }) +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" data-den-conv="enviar">Enviar denúncia</button>' +
+        '<button type="button" class="btn btn-outline" data-den-conv="cancelar">Cancelar</button></div></div>';
+    }
+
     function repintar() {
+      $('#deu-certo').innerHTML = deuCertoHtml() + '<div id="den-area">' + denunciaHtml(false) + '</div>';
       $('#wa-area').innerHTML = waBarHtml(cv, como);
       $('#msgs').innerHTML = bubblesHtml();
       $('#msgs').scrollTop = $('#msgs').scrollHeight;
@@ -3421,6 +3743,7 @@
     $('#content').innerHTML =
       vagaLinkHtml() +
       '<div id="wa-area"></div>' +
+      '<div id="deu-certo"></div>' +
       '<ul class="bubbles" id="msgs" aria-live="polite"></ul>' +
       '<form id="msg-form" class="chat-compose">' +
         '<label class="visually-hidden" for="msg-in">Mensagem</label>' +
@@ -3431,6 +3754,24 @@
 
     repintar();
     if (params.get('texto')) $('#msg-in').value = params.get('texto');
+
+    $('#deu-certo').addEventListener('click', function (e) {
+      var nao = e.target.closest('[data-deu-certo]');
+      var den = e.target.closest('[data-den-conv]');
+      var c = loadChat(), cvv = c.conversas[id];
+      if (nao) {
+        cvv.deuCerto = cvv.deuCerto || {}; cvv.deuCerto[como] = 'nao';
+        saveChat(c); cv = cvv; repintar(); say('Tudo bem. Você pode registrar a contratação depois.');
+      } else if (den) {
+        var a = den.getAttribute('data-den-conv');
+        if (a === 'abrir') { $('#den-area').innerHTML = denunciaHtml(true); return; }
+        if (a === 'cancelar') { $('#den-area').innerHTML = denunciaHtml(false); return; }
+        var m = document.querySelector('input[name="den-conv"]:checked');
+        if (!check([{ id: 'den-conv', ok: !!m, msg: 'Escolha o motivo da denúncia.' }])) return;
+        cvv.denuncia = m.value; saveChat(c); cv = cvv; repintar();
+        toast('Denúncia enviada para análise.');
+      }
+    });
 
     $('#wa-area').addEventListener('click', function (e) {
       var b = e.target.closest('[data-wa]');
@@ -4410,7 +4751,9 @@
     'minha-empresa': renderMinhaEmpresa,
     'meu-perfil': renderMeuPerfil,
     notificacoes: renderNotificacoes,
-    planos: renderPlanos
+    planos: renderPlanos,
+    cadastro: renderCadastro,
+    registrar: renderRegistrar
   };
   if (PAGES[page]) PAGES[page]();
 })();

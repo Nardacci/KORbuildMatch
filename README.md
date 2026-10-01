@@ -7,6 +7,8 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 | Arquivo | Tela |
 | --- | --- |
 | `index.html` | Entrar (escolha entre profissional e empresa) |
+| `cadastro.html` | Criar conta (profissional ou empresa, com a verificação da empresa) |
+| `registrar-contratacao.html?empresa=ID` | Profissional: registrar uma contratação para a empresa confirmar |
 | `empresa.html` | Início da empresa logada |
 | `profissional.html` | Início do profissional logado |
 | `publicar-vaga.html` | Empresa: formulário para publicar uma vaga |
@@ -125,6 +127,15 @@ Busca: mais filtros e ajuda da IA (seções 10 e 12):
 - **Mais filtros** (opcionais): tipo de contratação, idioma e reputação mínima nas duas buscas; salário a partir de um valor (mesma moeda e período) e área na busca de vagas. Quem ainda não tem avaliações não entra quando a reputação mínima está ligada.
 - **Redigir com ajuda da IA** (`publicar-vaga.html`): a partir de uma descrição curta, sugere título, descrição e competências, mostra o motivo de cada sugestão e ignora temas proibidos (por exemplo, "até 30 anos" vira "Ignoramos: idade"). Em "Meu perfil", "Sugerir com IA" escreve a apresentação a partir das experiências verificadas. **No protótipo, a IA é simulada** com regras simples; nada sai do navegador.
 
+Fechando o ciclo do MVP (seções 7.1, 7.2, 8.1 e 8.8):
+
+- **Cadastro de conta** (`cadastro.html`, em "Criar conta grátis"): profissional ou empresa, só com os dados necessários e o aceite dos termos. A empresa passa pela **verificação** — pelo domínio do e-mail ou, com e-mail pessoal, pelo número de registro. Nenhuma conta é criada de verdade; a demonstração segue com o João Silva ou a Empresa Exemplo.
+- **O profissional registra a contratação**: em "Minhas candidaturas", "Fui contratado" abre o registro do combinado; a empresa confirma ou não reconhece. Com a Empresa Exemplo, a confirmação aparece para a empresa (tela inicial → perfil do João); com as demais, a resposta da empresa é simulada no próprio card.
+- **"Deu certo?"**: depois que o contato é liberado na conversa, os dois lados veem a pergunta. "Sim" leva ao registro da contratação (a empresa já com a pessoa marcada); "Ainda não" esconde.
+- **Contestar vínculo recusado**: a empresa contesta quando o profissional diz que não foi contratado, e o profissional contesta quando a empresa não reconhece o registro. A moderação analisa; até lá, nada entra no histórico.
+- **Candidatura**: aviso de baixa compatibilidade ("Você atende 3 de 5 requisitos… pode se candidatar mesmo assim") e perfil mínimo pedido na própria candidatura quando falta algo essencial.
+- **Anotações internas** no perfil do profissional (só a empresa vê) e **denunciar conversa**.
+
 Identidade visual (modelo C · marca forte):
 
 - Topo escuro (azul-marinho) em todas as telas, com o verde-limão como cor de destaque e botões principais em azul-marinho.
@@ -134,7 +145,7 @@ Identidade visual (modelo C · marca forte):
 
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (74 passos, ~327 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (80 passos, ~353 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -159,6 +170,7 @@ vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
 mensagens.html, conversa.html
 buscar.html               busca com filtros de localização (as duas jornadas)
 vagas.html, minha-empresa.html, perfil.html, notificacoes.html, planos.html
+cadastro.html, registrar-contratacao.html
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
@@ -185,4 +197,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-1`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-2`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
