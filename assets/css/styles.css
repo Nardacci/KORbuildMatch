@@ -1438,3 +1438,31 @@ body[data-page="login"] .app {
 .sub-h { margin: 6px 0 0; font-size: 14px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
 [data-salvar][aria-pressed="true"] { background: var(--ink); color: #FFFFFF; }
 .avatar.avatar-empresa { color: #FFFFFF; background: var(--ink); }
+
+/* ---------- Reputação: responder e denunciar ---------- */
+
+.review-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.btn-quiet { background: transparent; color: var(--muted); }
+.btn-quiet:hover { background: #EEF2F7; color: var(--ink); }
+.btn-vinc { min-height: 34px; padding: 0 10px; font-size: 12.5px; flex-shrink: 0; }
+.btn-vinc[aria-pressed="true"] { background: var(--ink); color: #FFFFFF; }
+
+/* ---------- Notificações ---------- */
+
+.icon-btn .bell-count {
+  position: absolute; top: 4px; right: 2px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--lime); color: var(--ink);
+  font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+.notif { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--neutral-tint); color: var(--ink); text-decoration: none; }
+.notif:last-child { border-bottom: 0; }
+.notif:hover { background: var(--ground); color: var(--ink); }
+.notif:focus-visible { outline-offset: -3px; }
+.notif-nova { background: #F6FBE6; }
+.notif .row-title { font-size: 14.5px; }
+.pref-grid { display: grid; grid-template-columns: minmax(0, 1fr) 64px 64px; gap: 10px 6px; align-items: center; }
+.pref-h { font-size: 12px; font-weight: 800; color: var(--muted); text-align: center; }
+.pref-cat { font-size: 14px; font-weight: 600; }
+.pref-ck { display: flex; justify-content: center; min-height: 44px; align-items: center; cursor: pointer; }
+.pref-ck input { width: 22px; height: 22px; accent-color: var(--ink); }

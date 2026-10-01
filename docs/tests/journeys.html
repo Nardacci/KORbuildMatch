@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (61 passos, ~269 verificações).
+  KORbuild Match — testes automatizados (68 passos, ~297 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -17,6 +17,8 @@
     F — Abas que faltavam: Minhas vagas, editar/rascunho, Minha empresa (plano) e Meu perfil
     G — Resposta garantida: prazo vencido, seleção em lote, retirar candidatura, vaga encerrada
     H — Conexões: convite visível, salvar profissional e recontratação
+    I — Reputação: responder, denunciar, privacidade por vínculo e resposta à contestação
+    J — Notificações: sino com não lidas, tela de notificações e preferências de canal
 -->
 <meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
 <iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
@@ -817,6 +819,111 @@ var steps = [
     await go('perfil-empresa.html?id=loja-central');
     L(/Você já trabalhou aqui/.test(txt('#ja-trabalhei')), 'recontratar: profissional vê a empresa onde já trabalhou');
     L(!hasHScroll(), 'recontratar: sem rolagem horizontal');
+  },
+
+  /* ===== BLOCO I — Reputação (seção 8): resposta, denúncia, privacidade por vínculo e contestação ===== */
+
+  // I1: a empresa responde a uma avaliação; a resposta aparece no perfil público
+  async function () {
+    await fresh(); await go('minha-empresa.html');
+    $('#acc-aval-btn').click();
+    var rv = '[data-review="emp:empresa-exemplo:1"]';
+    L(!!$(rv + ' [data-rep="responder"]') && !$('[data-review="emp:empresa-exemplo:0"] [data-rep="responder"]'), 'responder: só onde ainda não há resposta');
+    $(rv + ' [data-rep="responder"]').click();
+    $(rv + ' [data-rep="publicar"]').click();
+    L(!!$(rv + ' .field.invalid'), 'responder: exige texto');
+    set(rv + ' textarea', 'Obrigado, Camila! Ajustamos o anúncio.');
+    $(rv + ' [data-rep="publicar"]').click();
+    L(/Resposta da empresa/.test(txt(rv + ' .review-reply')) && !$(rv + ' [data-rep="responder"]'), 'responder: publicada');
+    await go('perfil-empresa.html?id=empresa-exemplo');
+    L(/Obrigado, Camila! Ajustamos o anúncio/.test(txt(rv)), 'responder: aparece no perfil público');
+  },
+  // I2: denunciar uma avaliação (motivo obrigatório; a nota não muda)
+  async function () {
+    var rv = '[data-review="emp:empresa-exemplo:0"]';
+    $(rv + ' [data-rep="denunciar"]').click();
+    L(/não altera notas/.test(txt(rv + ' .review-actions')), 'denunciar: explica a regra da moderação');
+    $(rv + ' [data-rep="enviar-denuncia"]').click();
+    L(/Escolha o motivo/.test(txt(rv + ' .field-error')), 'denunciar: exige o motivo');
+    $(rv + ' input[value="Informação falsa"]').click();
+    $(rv + ' [data-rep="enviar-denuncia"]').click();
+    L(/em moderação/.test(txt(rv + ' .review-actions')), 'denunciar: enviada para moderação');
+    L(!hasHScroll(), 'denunciar: sem rolagem horizontal');
+  },
+  // I3: o profissional responde e oculta o nome da empresa em um vínculo
+  async function () {
+    await go('perfil.html');
+    $('#acc-aval-btn').click();
+    L(!!$('[data-review="prof:joao-silva:0"]') && !$('[data-review="prof:joao-silva:0"] [data-rep="responder"]'), 'meu perfil: avaliação que já tem resposta não pede outra');
+    $('[data-vinculo="0"]').click();
+    L($('[data-vinculo="0"]').getAttribute('aria-pressed') === 'true', 'privacidade por vínculo: nome oculto');
+    await go('perfil-profissional.html?id=joao-silva&vaga=recepcionista');
+    L(/Empresa não divulgada/.test(txt('.hist-verified')) && /Hotel Vista Mar/.test(txt('.hist-verified')), 'privacidade por vínculo: a empresa vê "Empresa não divulgada"');
+  },
+  // I4: a empresa responde à contestação corrigindo o combinado; o profissional confirma de novo
+  async function () {
+    await fresh();
+    $('#confirm-card [data-cf="contestar"]').click();
+    set('#contestacao-texto', 'O salário combinado era R$ 2.300.');
+    $('#confirm-card [data-cf="enviar-contestacao"]').click();
+    await go('empresa.html');
+    var link = $$('.content a').filter(function (a) { return /Combinado contestado por João Silva/.test(a.textContent); })[0];
+    L(!!link && /revisar=1/.test(link.getAttribute('href')), 'contestação: a empresa pode responder');
+    await clickNav(link);
+    L(/O salário combinado era R\$ 2\.300/.test(txt('#contestacao-citada')), 'contestação: mostra o que o profissional disse');
+    $('#rev-corrigir').click();
+    L($('#valor2').value === '2100', 'corrigir: formulário com o combinado atual');
+    set('#valor2', '2300');
+    submit('#comb-form');
+    L(txt('#done-title') === 'Combinado corrigido', 'corrigir: enviado');
+    await go('profissional.html');
+    L(/A empresa corrigiu o combinado/.test(txt('#revisao-empresa')) && /R\$\s?2\.300,00/.test(txt('#confirm-card')), 'profissional: vê o combinado corrigido para confirmar');
+    $('#confirm-card [data-cf="confirmar"]').click();
+    await go('empresa.html?aba=vagas');
+    var rec = $$('a.list-item').filter(function (a) { return /Recepcionista/.test(a.textContent); })[0];
+    L(/Preenchida por João Silva · confirmado/.test(rec.textContent), 'contestação resolvida: contratação confirmada');
+  },
+  // I5: manter o combinado e responder
+  async function () {
+    await fresh();
+    $('#confirm-card [data-cf="contestar"]').click();
+    set('#contestacao-texto', 'A jornada era até as 17h.');
+    $('#confirm-card [data-cf="enviar-contestacao"]').click();
+    await go('preencher-vaga.html?vaga=recepcionista&revisar=1');
+    $('#rev-manter').click();
+    set('#rev-texto', 'A jornada até 18h foi a combinada na conversa.');
+    submit('#manter-form');
+    L(txt('#done-title') === 'Resposta enviada', 'manter: resposta enviada');
+    await go('profissional.html');
+    L(/manteve o combinado e respondeu/.test(txt('#revisao-empresa')) && /até 18h foi a combinada/.test(txt('#revisao-empresa')), 'manter: o profissional vê a resposta');
+  },
+
+  /* ===== BLOCO J — Notificações (seção 11) ===== */
+
+  // J1: o sino mostra as não lidas; a tela lista e marca como lidas
+  async function () {
+    await fresh(); await go('empresa.html');
+    L(/Notificações, \d+ novas/.test($('#sino').getAttribute('aria-label')) && /notificacoes\.html\?como=empresa/.test($('#sino').getAttribute('href')), 'sino empresa: conta as não lidas: ' + $('#sino').getAttribute('aria-label'));
+    await clickNav($('#sino'));
+    var t = txt('#notif-list');
+    L(/Nova mensagem de Rafael Lima/.test(t) && /candidatos novos em Atendente de loja/.test(t) && /espera resposta há mais de 7 dias/.test(t) && /Avalie Ana Souza/.test(t), 'notificações empresa: mensagem, candidatos, prazo e avaliação');
+    L($$('.notif-nova').length > 0, 'notificações: as novas aparecem destacadas');
+    L(!!$('input[data-pref="mensagens:email"]'), 'notificações: preferências por tipo e canal');
+    $('input[data-pref="mensagens:email"]').click();
+    L(JSON.parse(f.contentWindow.sessionStorage.getItem('kor.notif')).prefs['empresa:mensagens:email'] === false, 'preferências: salvas');
+    await go('empresa.html');
+    L($('#sino').getAttribute('aria-label') === 'Notificações', 'sino: zera depois de abrir a tela');
+    L(!hasHScroll(), 'notificações: sem rolagem horizontal');
+  },
+  // J2: notificações do profissional
+  async function () {
+    await go('notificacoes.html?como=profissional');
+    var t = txt('#notif-list');
+    L(/Grupo Horizonte convidou você/.test(t) && /indicou você como contratado/.test(t) && /não respondeu no prazo/.test(t) && /Vaga compatível/.test(t) && /Avalie a Loja Central/.test(t), 'notificações profissional: convite, contratação, prazo, vaga compatível e avaliação');
+    await go('perfil-empresa.html?id=loja-central');
+    $('#seguir').click();
+    await go('notificacoes.html?como=profissional');
+    L(/Loja Central, que você segue, tem vaga aberta/.test(txt('#notif-list')), 'notificações: empresa seguida com vaga aberta');
   }
 ];
 (async function () {
