@@ -6,6 +6,7 @@ Telas iniciais do KORbuild Match com **dados fictícios**, para validação com 
 
 | Arquivo | Tela |
 | --- | --- |
+| `demo.html` | Demonstração: escolha de jornada, atalhos, instalar no celular e recomeçar (use nos testes com usuários) |
 | `index.html` | Entrar (escolha entre profissional e empresa) |
 | `cadastro.html` | Criar conta (profissional ou empresa, com a verificação da empresa) |
 | `registrar-contratacao.html?empresa=ID` | Profissional: registrar uma contratação para a empresa confirmar |
@@ -136,6 +137,11 @@ Fechando o ciclo do MVP (seções 7.1, 7.2, 8.1 e 8.8):
 - **Candidatura**: aviso de baixa compatibilidade ("Você atende 3 de 5 requisitos… pode se candidatar mesmo assim") e perfil mínimo pedido na própria candidatura quando falta algo essencial.
 - **Anotações internas** no perfil do profissional (só a empresa vê) e **denunciar conversa**.
 
+Demonstração e app instalável (seção 14):
+
+- **`demo.html`** (link "Sobre esta demonstração" no login): explica o protótipo, leva às duas jornadas e ao cadastro, tem atalhos para as telas principais, as instruções para instalar no celular e o botão **"Recomeçar a demonstração"** (apaga o que foi feito e volta aos dados de exemplo — use antes de cada sessão de teste).
+- **App instalável (PWA)**: `manifest.webmanifest` (nome, cores, abre na tela de demonstração), ícones em `assets/icons/` e `sw.js`. O service worker busca sempre a versão nova na rede e guarda uma cópia para abrir sem internet, então o app instalado nunca fica preso a uma versão antiga. No Android, o botão "Instalar app" aparece na tela de demonstração; no iPhone, Safari → Compartilhar → "Adicionar à Tela de Início".
+
 Identidade visual (modelo C · marca forte):
 
 - Topo escuro (azul-marinho) em todas as telas, com o verde-limão como cor de destaque e botões principais em azul-marinho.
@@ -145,7 +151,7 @@ Identidade visual (modelo C · marca forte):
 
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (80 passos, ~357 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (82 passos, ~366 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -170,7 +176,8 @@ vaga.html, candidaturas.html, perfil-empresa.html, avaliar-empresa.html
 mensagens.html, conversa.html
 buscar.html               busca com filtros de localização (as duas jornadas)
 vagas.html, minha-empresa.html, perfil.html, notificacoes.html, planos.html
-cadastro.html, registrar-contratacao.html
+cadastro.html, registrar-contratacao.html, demo.html
+manifest.webmanifest, sw.js, assets/icons/   app instalável (PWA)
 assets/css/styles.css     estilos (mobile first)
 assets/js/mock-data.js    dados fictícios
 assets/js/app.js          renderização das telas e interações
@@ -197,4 +204,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-3`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-4`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
