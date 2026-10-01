@@ -1250,6 +1250,10 @@
         '<p class="row-sub">Com o app instalado, o KORbuild Match abre em tela cheia, com ícone na tela inicial, e funciona mesmo com a internet fraca.</p>' +
         '<div id="instalar-area">' + instalarHtml() + '</div></section>' +
 
+      '<section class="login-card" aria-labelledby="h-beta"><h2 class="card-title" id="h-beta">Versão beta</h2>' +
+        '<p class="row-sub">A versão real, ligada ao banco de dados, está sendo construída por etapas. Já dá para criar a conta, confirmar o e-mail e completar o perfil.</p>' +
+        link('app/entrar.html', 'Entrar na versão beta', 'Conta e dados reais. Separada desta demonstração.', 'logo') + '</section>' +
+
       '<section class="login-card"><h2 class="card-title">Recomeçar do zero</h2>' +
         '<p class="row-sub">Apaga o que foi feito nesta demonstração (candidaturas, conversas, avaliações) e volta aos dados de exemplo. Use antes de cada sessão de teste.</p>' +
         '<button type="button" class="btn btn-outline" id="demo-reset">Recomeçar a demonstração</button></section>' +

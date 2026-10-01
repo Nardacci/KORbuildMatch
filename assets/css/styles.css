@@ -1560,3 +1560,16 @@ body[data-page="demo"] .app {
   background: var(--card);
   color: var(--ink);
 }
+
+/* ---------- Versão real (app/) ---------- */
+
+.beta-banner { background: var(--ink); color: var(--lime); }
+.meter { height: 8px; border-radius: 4px; background: var(--neutral-tint); overflow: hidden; }
+.meter span { display: block; height: 100%; border-radius: 4px; background: var(--blue); transition: width .3s; }
+.todo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
+.todo-list li { display: flex; gap: 8px; align-items: center; }
+.todo-list li.ok { color: var(--ink); }
+.todo-list li.ok svg { color: var(--green-ring); }
+.btn[disabled] { opacity: .7; cursor: progress; }
+.btn-sair { margin-left: auto; min-height: 40px; padding: 0 16px; background: rgba(255, 255, 255, .12); color: #FFFFFF; border: 0; }
+.btn-sair:hover { background: rgba(255, 255, 255, .2); }

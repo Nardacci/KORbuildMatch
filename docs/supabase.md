@@ -8,14 +8,55 @@ não usa o banco: isso começa na etapa 2.
 
 | Etapa | O que entra | Situação |
 | --- | --- | --- |
-| 1. Esquema | Tabelas, regras de acesso (RLS), regras de negócio, currículos, mensagens em tempo real | **Pronto** — aplicar no Supabase |
-| 2. Contas | Cadastro, confirmação de e-mail, entrar, sair, recuperar senha, perfil da empresa e do profissional | Próxima |
-| 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos, convites, salvos | |
+| 1. Esquema | Tabelas, regras de acesso (RLS), regras de negócio, currículos, mensagens em tempo real | **Pronto** e aplicado |
+| 2. Contas | Cadastro, confirmação de e-mail, entrar, sair, recuperar senha, perfil da empresa e do profissional | **Pronto**: `app/` |
+| 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos, convites, salvos | Próxima |
 | 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do WhatsApp | |
 | 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | |
 | 6. Avisos e plano | E-mails e notificações, lembrete de 7 dias, cobrança do plano | |
 
-Enquanto isso, o protótipo com dados fictícios continua no ar como demonstração.
+Enquanto isso, o protótipo com dados fictícios continua no ar como demonstração, na raiz do site.
+A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
+
+## Versão real (`app/`)
+
+| Arquivo | O que faz |
+| --- | --- |
+| `app/config.js` | Endereço do projeto e chave publicável. Só a publicável: a secreta nunca vai para o site. |
+| `app/dados.js` | Listas dos formulários (países, cidades com ponto aproximado, portes, disponibilidade). |
+| `app/app.js` | As telas: `entrar`, `cadastro`, `recuperar`, `nova-senha`, `inicio`, `perfil`. |
+| `assets/vendor/supabase-js-2.117.2.js` | Biblioteca oficial do Supabase, guardada no site (sem depender de CDN). |
+
+- **Cadastro**: envia `tipo`, `nome` e o que a pessoa digitou (país e setor, ou cidade e "o que você faz"). O banco cria o perfil; no primeiro acesso, o site completa o perfil com esses dados.
+- **Confirmação de e-mail**: o link do e-mail abre `app/inicio.html` já com a sessão. Se o link vencer, a pessoa entra com e-mail e senha ou pede outro link.
+- **Recuperar senha**: o link abre `app/nova-senha.html`. A resposta é a mesma exista ou não a conta, para não revelar quem está cadastrado.
+- **Início**: mostra o que falta no perfil (progresso) e leva para editar.
+- **Perfil**: empresa (setor, porte, sede, site, sobre) ou profissional (o que faz, cidade, disponibilidade, distância, modelos, competências, aparecer nas buscas), mais o contato e a troca de senha.
+- **Cidades**: por enquanto, a mesma lista fixa do protótipo. Para aceitar qualquer cidade, a próxima evolução é um serviço de busca de endereços (geocodificação).
+
+Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num navegador contra um Supabase simulado (37 verificações).
+
+### Modelos de e-mail em português
+
+Em **Authentication → Emails → Templates**:
+
+**Confirm signup**: assunto `Confirme sua conta no KORbuild Match`
+
+```html
+<h2>Falta só confirmar seu e-mail</h2>
+<p>Olá! Toque no botão para ativar sua conta no KORbuild Match.</p>
+<p><a href="{{ .ConfirmationURL }}">Confirmar minha conta</a></p>
+<p>Se você não criou esta conta, ignore este e-mail.</p>
+```
+
+**Reset password**: assunto `Crie uma nova senha no KORbuild Match`
+
+```html
+<h2>Nova senha</h2>
+<p>Recebemos um pedido para trocar a senha da sua conta. Toque no botão para criar uma nova. O link vale por 1 hora.</p>
+<p><a href="{{ .ConfirmationURL }}">Criar nova senha</a></p>
+<p>Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>
+```
 
 ## 1. Aplicar o esquema
 

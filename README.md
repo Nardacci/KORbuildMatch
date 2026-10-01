@@ -210,8 +210,8 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-5`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261002-1`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
 
 ## Banco de dados (Supabase)
 
-O caminho para sair dos dados fictícios está em [`docs/supabase.md`](docs/supabase.md): o esquema completo do banco com as regras de acesso em `supabase/migrations/` e os testes das regras em `supabase/tests/` (109 verificações). O site ainda usa os dados fictícios; a ligação com o banco entra por etapas, começando pelas contas.
+O caminho para sair dos dados fictícios está em [`docs/supabase.md`](docs/supabase.md): o esquema completo do banco com as regras de acesso em `supabase/migrations/` e os testes das regras em `supabase/tests/` (109 verificações). O protótipo continua com os dados fictícios. A **versão real (beta)** fica em `app/` e entra por etapas: a etapa de contas está pronta (cadastro com confirmação de e-mail, entrar, sair, recuperar senha e perfil da empresa ou do profissional). Acesso: `app/entrar.html`, ou pela página de demonstração.
