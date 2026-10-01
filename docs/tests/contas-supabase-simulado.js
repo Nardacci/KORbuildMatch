@@ -20,6 +20,8 @@ function uidDe(h) { const a = (h['authorization'] || '').replace('Bearer ', '');
 function auth(method, path, q, body, h) {
   log.push(method + ' ' + path);
   if (path === '/auth/v1/signup') {
+    if (/@naoautorizado\.test$/.test(body.email)) return erro(400, 'email_address_not_authorized', 'Email address "' + body.email + '" cannot be used as it is not authorized');
+    if (/@falhaenvio\.test$/.test(body.email)) return erro(500, 'unexpected_failure', 'Error sending confirmation email');
     if (porEmail(body.email)) { const u = porEmail(body.email); return { status: 200, body: Object.assign(userJson(u), { identities: [] }) }; }
     if (body.password.length < 8) return erro(422, 'weak_password', 'Password should be at least 8 characters');
     const u = { id: crypto.randomUUID(), email: body.email, senha: body.password, meta: body.data || {}, confirmado: false, criado: new Date().toISOString(), redirect: q.get('redirect_to') };
@@ -237,6 +239,15 @@ function rest(method, path, q, body, h) {
   await pg.fill('#cad-senha', 'qualquer-1'); await pg.check('#cad-termos'); await pg.click('#cad-btn');
   await pg.waitForSelector('#email-titulo');
   L(porEmail('joao@exemplo.com').meta.nome === 'João Silva', 'cadastro repetido: não revela nem sobrescreve a conta');
+  // 11. Erros do envio de e-mail aparecem com explicação e código
+  await pg.goto(B + 'cadastro.html?como=empresa'); await pg.waitForSelector('#cad-setor');
+  await pg.fill('#cad-nome', 'Teste Erro'); await pg.fill('#cad-email', 'a@naoautorizado.test'); await pg.selectOption('#cad-pais', 'BR');
+  await pg.fill('#cad-setor', 'Testes'); await pg.fill('#cad-senha', 'senha-forte-1'); await pg.check('#cad-termos'); await pg.click('#cad-btn');
+  await pg.waitForFunction(() => /modo de teste/.test(document.querySelector('#form-status').textContent));
+  L(/email_address_not_authorized/.test(await t('#form-status')), 'erro: e-mail não autorizado explicado, com código: ' + await t('#form-status'));
+  await pg.fill('#cad-email', 'a@falhaenvio.test'); await pg.click('#cad-btn');
+  await pg.waitForFunction(() => /enviar o e-mail de confirmação/.test(document.querySelector('#form-status').textContent));
+  L(/Error sending confirmation email/.test(await t('#form-status')), 'erro: falha no envio do e-mail explicada');
   console.log('RESUMO:', pass, '/', pass + fail, 'passaram'); console.log('page errors:', errs);
   await b.close();
 })().catch(e => { console.error('ERRO', e.message); process.exit(1); });
