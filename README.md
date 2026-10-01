@@ -129,7 +129,7 @@ Busca: mais filtros e ajuda da IA (seções 10 e 12):
 
 Fechando o ciclo do MVP (seções 7.1, 7.2, 8.1 e 8.8):
 
-- **Cadastro de conta** (`cadastro.html`, em "Criar conta grátis"): profissional ou empresa, só com os dados necessários e o aceite dos termos. A empresa passa pela **verificação** — pelo domínio do e-mail ou, com e-mail pessoal, pelo número de registro. Nenhuma conta é criada de verdade; a demonstração segue com o João Silva ou a Empresa Exemplo.
+- **Cadastro de conta** (`cadastro.html`, em "Criar conta grátis"): profissional ou empresa, só com os dados necessários e o aceite dos termos. Depois de criar a conta, a tela **"Confirme seu e-mail"** mostra para onde o link foi, a dica de olhar o spam, "Reenviar e-mail" (liberado depois de 60 s) e "Corrigir o e-mail" (volta ao formulário preenchido); a prévia do e-mail aparece logo abaixo, com o botão "Confirmar minha conta". Confirmado o e-mail, a empresa passa pela **verificação** — pelo domínio do e-mail ou, com e-mail pessoal, pelo número de registro. Nenhuma conta é criada de verdade; a demonstração segue com o João Silva ou a Empresa Exemplo.
 - **O profissional registra a contratação**: em "Minhas candidaturas", "Fui contratado" abre o registro do combinado; a empresa confirma ou não reconhece. Com a Empresa Exemplo, a confirmação aparece para a empresa (tela inicial → perfil do João); com as demais, a resposta da empresa é simulada no próprio card.
 - **"Deu certo?"**: depois que o contato é liberado na conversa, os dois lados veem a pergunta. "Sim" leva ao registro da contratação (a empresa já com a pessoa marcada); "Ainda não" esconde.
 - **Contestar vínculo recusado**: a empresa contesta quando o profissional diz que não foi contratado, e o profissional contesta quando a empresa não reconhece o registro. A moderação analisa; até lá, nada entra no histórico.
@@ -145,7 +145,7 @@ Identidade visual (modelo C · marca forte):
 
 ## Testes
 
-`docs/tests/journeys.html` é uma suíte de testes automatizados (80 passos, ~353 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
+`docs/tests/journeys.html` é uma suíte de testes automatizados (80 passos, ~357 verificações) que roda os fluxos das duas jornadas dentro de um iframe de 390px e mostra PASS/FAIL de cada verificação. Para rodar: publique o protótipo (ou sirva a pasta localmente) e abra esse arquivo no navegador — ele carrega as páginas por caminho relativo (`../../`), então precisa estar na mesma hospedagem que o resto do protótipo. `?until=N` roda só os N primeiros passos; `?h=ALTURA` ajusta a altura do iframe.
 
 ## Demonstração
 
@@ -197,4 +197,4 @@ As páginas têm `noindex` e o `robots.txt` bloqueia buscadores, para que o prot
 
 ## Versão do cache
 
-Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-2`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.
+Os arquivos de `assets/` são chamados com `?v=AAAAMMDD-N` em todos os HTML (por exemplo, `styles.css?v=20261001-3`). A cada publicação que mude CSS ou JS, troque esse valor em todos os arquivos; assim o navegador baixa a versão nova em vez de usar a antiga do cache.

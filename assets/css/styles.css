@@ -1494,3 +1494,12 @@ body[data-page="cadastro"] .app {
 .done-card { align-items: flex-start; }
 .den-row { justify-content: flex-end; }
 .den-ok { display: flex; gap: 6px; align-items: center; }
+
+/* ---------- Cadastro: confirmação do e-mail ---------- */
+
+.email-card { align-items: flex-start; }
+.email-previa { border: 1.5px dashed var(--line-strong); background: #FAFBFD; }
+.email-corpo { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--radius-sm); background: #FFFFFF; border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+.email-corpo .btn { align-self: flex-start; }
+.login > .login-card + .login-card { margin-top: -12px; }
+.email-previa .summary dd { overflow-wrap: anywhere; }
