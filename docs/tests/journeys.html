@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (74 passos, ~327 verificações).
+  KORbuild Match — testes automatizados (80 passos, ~353 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -21,6 +21,8 @@
     J — Notificações: sino com não lidas, tela de notificações e preferências de canal
     K — Modelo de negócio: planos, fim do período grátis, limite de vagas e destaque
     L — Filtros restantes da busca e ajuda da IA para redigir vaga e perfil
+    M — Ciclo do MVP: cadastro, registro pelo profissional, "Deu certo?", contestações,
+        anotações internas, denunciar conversa, baixa compatibilidade e perfil mínimo
 -->
 <meta charset="utf-8"><base href="../../"><body style="margin:0;background:#777;font:11px monospace;color:#fff">
 <iframe id="f" style="border:0;width:390px;display:block;background:#fff;position:absolute;left:0;top:0"></iframe>
@@ -1023,6 +1025,106 @@ var steps = [
     $('#editar-perfil').click();
     $('#pf-ia').click();
     L(/experiência verificada como atendente e recepcionista/.test($('#pf-apres').value) && /Revise antes de salvar/.test(txt('#pf-ia-motivo')), 'IA: sugestão de apresentação no perfil');
+  },
+
+  /* ===== BLOCO M — Fechando o ciclo do MVP: cadastro, registro pelo profissional, contestações ===== */
+
+  // M1: cadastro de conta (profissional e empresa, com verificação)
+  async function () {
+    await go('index.html'); f.contentWindow.sessionStorage.clear();
+    await clickNav(linkByText('Criar conta grátis'));
+    L(/Criar conta grátis/.test(txt('.hero')) && /nada de idade, gênero/.test(txt('#cad-form')), 'cadastro: tela e dados mínimos');
+    submit('#cad-form');
+    L($$('.field-error').filter(function (e) { return !e.hidden; }).length === 5, 'cadastro: campos obrigatórios e aceite dos termos');
+    $('[data-cad-role="empresa"]').click();
+    set('#cad-nome', 'Padaria Pão Bom'); set('#cad-email', 'dono@gmail.com'); set('#cad-pais', 'Brasil'); set('#cad-setor', 'Alimentação');
+    set('#cad-senha', '12345678'); $('#cad-termos').click();
+    submit('#cad-form');
+    L(/Verificar a empresa/.test(txt('.hero')) && /uso pessoal/.test(txt('#ver-form')), 'cadastro empresa: verificação por documento (e-mail pessoal)');
+    set('#ver-doc', '12.345.678/0001-90'); submit('#ver-form');
+    L(/verificação em análise/.test(txt('#cad-done')) && /3 meses grátis/.test(txt('#cadastro')), 'cadastro empresa: conta criada, verificação em análise');
+    await clickNav($('#cad-entrar'));
+    L(/empresa\.html$/.test(f.contentWindow.location.pathname), 'cadastro: entra na demonstração');
+    L(!hasHScroll(), 'cadastro: sem rolagem horizontal');
+  },
+  // M2: o profissional registra a contratação; empresa não reconhece; ele contesta
+  async function () {
+    await fresh(); await go('candidaturas.html?status=andamento');
+    var hotel = $$('#cand-list article').filter(function (a) { return /Hotel Vista Mar/.test(a.textContent); })[0];
+    await clickNav(Array.prototype.slice.call(hotel.querySelectorAll('a')).filter(function (a) { return /Fui contratado/.test(a.textContent); })[0]);
+    L(/Você foi contratado por Hotel Vista Mar\?/.test(txt('.page-title')) && $('#funcao').value === 'Recepcionista de plantão', 'registro: formulário com a vaga');
+    pick('tipo-contratacao', 'Tempo integral'); set('#valor2', '2400'); set('#data-inicio', '2026-10-20'); set('#jornada', 'Escala 12x36');
+    submit('#reg-form');
+    L(/Pedido enviado para Hotel Vista Mar/.test(txt('#done-title')), 'registro: enviado para a empresa confirmar');
+    await go('candidaturas.html?status=contratado');
+    var card = function () { return $$('#cand-list article').filter(function (a) { return /Hotel Vista Mar/.test(a.textContent); })[0]; };
+    L(/aguardando a empresa/.test(card().textContent) && /Escala 12x36/.test(card().textContent), 'registro: aguardando a empresa, com o combinado');
+    card().querySelector('[data-reg="recusar"]').click();
+    L(/Contratação não reconhecida/.test(card().textContent), 'registro: empresa não reconhece (simulado)');
+    card().querySelector('[data-reg="contestar"]').click();
+    set('#reg-contest', 'Trabalho lá desde 20/10; tenho a escala.');
+    $('[data-reg="enviar-contestacao"]').click();
+    L(/Contestação em análise/.test(card().textContent), 'vínculo recusado: o profissional contesta');
+  },
+  // M3: registro com a Empresa Exemplo, confirmado pela empresa
+  async function () {
+    await go('registrar-contratacao.html?empresa=empresa-exemplo&vaga=Atendente%20de%20loja');
+    pick('tipo-contratacao', 'Meio período'); set('#valor2', '1500'); set('#data-inicio', '2026-10-10'); set('#jornada', 'Sábados e domingos');
+    submit('#reg-form');
+    await go('empresa.html');
+    var l = $$('.content a').filter(function (a) { return /registrou uma contratação/.test(a.textContent); })[0];
+    L(!!l, 'empresa: pendência para confirmar o registro do profissional');
+    await clickNav(l);
+    L(/Sábados e domingos/.test(txt('#registro-joao')), 'empresa: vê o combinado registrado pelo profissional');
+    $('[data-regemp="confirmado"]').click();
+    L(/Você confirmou/.test(txt('#registro-joao')), 'empresa: confirma; o vínculo entra no histórico');
+  },
+  // M4: "Deu certo?" depois de liberar o contato, denunciar conversa, anotações internas
+  async function () {
+    await go('conversa.html?id=rafael-lima&como=empresa');
+    $('#wa-area [data-wa="compartilhar"]').click();
+    L(/Deu certo\?/.test(txt('#deu-certo-card')), '"Deu certo?" aparece depois de liberar o contato');
+    var href = $('#deu-certo-card a').getAttribute('href');
+    $('[data-den-conv="abrir"]').click(); $('input[name="den-conv"][value="Spam"]').click(); $('[data-den-conv="enviar"]').click();
+    L(/Conversa denunciada · em análise/.test(txt('#den-conversa')), 'denunciar conversa');
+    $('[data-deu-certo="nao"]').click();
+    L(!/Deu certo\?/.test(txt('#deu-certo')), '"Ainda não" esconde a pergunta');
+    await go(href);
+    L($('input[name="quem"][value="rafael-lima"]').checked, '"Sim, registrar": Rafael já marcado em quem preencheu');
+    await go('perfil-profissional.html?id=rafael-lima');
+    set('#nota-interna', 'Boa conversa; disponível em 30 dias.'); $('#nota-salvar').click();
+    await go('perfil-profissional.html?id=rafael-lima');
+    L($('#nota-interna').value === 'Boa conversa; disponível em 30 dias.' && /não tem acesso/.test(txt('#f-nota-interna')), 'anotações internas salvas, só a empresa vê');
+  },
+  // M5: baixa compatibilidade e perfil mínimo na candidatura
+  async function () {
+    await go('vaga.html?id=suporte-cliente');
+    $('#candidatar').click();
+    L(/Você atende 3 de 5 requisitos/.test(txt('#baixa-compat')) && /mesmo assim/.test(txt('#baixa-compat')), 'baixa compatibilidade: avisa sem bloquear');
+    var sp = JSON.parse(f.contentWindow.sessionStorage.getItem('kor.profissional') || '{}');
+    sp.perfil = { competencias: [], disponibilidade: '' };
+    f.contentWindow.sessionStorage.setItem('kor.profissional', JSON.stringify(sp));
+    await go('vaga.html?id=atendente-loja');
+    $('#candidatar').click();
+    L(!!$('#perfil-minimo'), 'perfil mínimo: pede o que falta na própria candidatura');
+    $('#enviar').click();
+    L(/Complete o perfil/.test(txt('#form-status')), 'perfil mínimo: bloqueia sem o essencial');
+    set('#min-comp', 'Atendimento, Caixa'); set('#min-disp', 'Disponível imediatamente');
+    $('#enviar').click();
+    L(txt('#done-title') === 'Candidatura enviada', 'perfil mínimo: completa e envia');
+  },
+  // M6: a empresa contesta a recusa do vínculo; o profissional vê
+  async function () {
+    await fresh();
+    $('#confirm-card [data-cf="recusar"]').click(); $('#confirm-card [data-cf="confirmar-recusa"]').click();
+    await go('empresa.html');
+    var l = $$('.content a').filter(function (a) { return /Contratação recusada por João Silva/.test(a.textContent); })[0];
+    L(!!l && /contestar=1/.test(l.getAttribute('href')), 'recusa: a empresa pode contestar');
+    await clickNav(l);
+    set('#contest-texto', 'Ele começou a trabalhar no dia 06/10.'); submit('#contest-form');
+    L(txt('#done-title') === 'Contestação enviada', 'recusa: contestação enviada');
+    await go('candidaturas.html?status=encerradas');
+    L(/A empresa contestou sua resposta/.test(txt('#recusa-contestada')), 'recusa: o profissional vê a contestação');
   }
 ];
 (async function () {
