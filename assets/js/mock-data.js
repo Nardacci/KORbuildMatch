@@ -128,7 +128,7 @@
         },
         { id: 'novos', icone: 'users', vaga: 'atendente', titulo: '{n} candidatos novos', texto: 'Atendente de loja', href: 'candidatos.html?vaga=atendente' },
         { id: 'avaliar', icone: 'star', tom: 'amber', profissional: 'ana-souza', titulo: 'Avalie Ana Souza', texto: 'Vendedora · prazo termina em 5 dias', href: 'avaliar-profissional.html?id=ana-souza' },
-        { id: 'mensagens', icone: 'message', titulo: '2 mensagens sem resposta', texto: 'Candidatos de Atendente de loja' }
+        { id: 'mensagens', icone: 'message', tom: 'amber', titulo: '{n} mensagens sem resposta', texto: 'Candidatos de {vagas}' }
       ],
 
       // Vagas, da mais recente para a mais antiga. Vagas publicadas na demonstração entram na frente.
@@ -847,6 +847,28 @@
         ],
         compartilhou: { empresa: false, profissional: true },
         lidoPor: { empresa: false, profissional: true }
+      },
+      // Lida, mas ainda sem resposta da empresa: entra em "Mensagens sem resposta".
+      'mariana-rocha': {
+        ladoDono: 'empresa', profissionalId: 'mariana-rocha', empresaId: 'empresa-exemplo',
+        vagaTitulo: 'Atendente de loja', vagaEmpresaId: 'atendente', vagaProfId: 'atendente-exemplo',
+        mensagens: [
+          { de: 'empresa', texto: 'Oi, Mariana! Gostamos da sua candidatura para Atendente de loja. Podemos conversar esta semana?', quando: '2026-09-24T09:15:00' },
+          { de: 'profissional', texto: 'Oi! Claro. Tenho disponibilidade na quinta à tarde. A vaga aceita escala de fim de semana alternado?', quando: '2026-09-25T18:05:00' }
+        ],
+        compartilhou: { empresa: false, profissional: false },
+        lidoPor: { empresa: true, profissional: true }
+      },
+      // Já respondida pela empresa: fica só na lista geral.
+      'paulo-andrade': {
+        ladoDono: 'empresa', profissionalId: 'paulo-andrade', empresaId: 'empresa-exemplo',
+        vagaTitulo: 'Atendente de loja', vagaEmpresaId: 'atendente', vagaProfId: 'atendente-exemplo',
+        mensagens: [
+          { de: 'profissional', texto: 'Bom dia! Queria saber se a vaga oferece vale-transporte.', quando: '2026-09-22T08:30:00' },
+          { de: 'empresa', texto: 'Bom dia, Paulo! Oferece sim, além de vale-refeição. Te mandamos os detalhes por aqui.', quando: '2026-09-22T10:02:00' }
+        ],
+        compartilhou: { empresa: false, profissional: false },
+        lidoPor: { empresa: true, profissional: true }
       },
       'hotel-vista-mar': {
         ladoDono: 'profissional', profissionalId: 'joao-silva', empresaId: 'hotel-vista-mar',
