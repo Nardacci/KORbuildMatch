@@ -97,7 +97,16 @@
       // O cartão só é pedido quando o período gratuito termina.
       plano: {
         nome: 'Essencial', preco: 'US$ 79,00/mês', gratisDesde: '2026-08-20', mesesGratis: 3,
-        limiteVagasAtivas: 3, limiteConvitesMes: 30, convitesUsadosMes: 4
+        limiteVagasAtivas: 3, limiteConvitesMes: 30, convitesUsadosMes: 4,
+        inclui: ['Até 3 vagas ativas', 'Indicações completas de profissionais', '30 convites diretos por mês', 'Filtros avançados na busca'],
+        // Opções avulsas: os preços ainda estão pendentes no documento (seção 16).
+        avulsas: [
+          { id: 'vaga-avulsa', nome: 'Vaga avulsa', preco: 'US$ 39–69 por 30 dias', pendente: true,
+            texto: 'Uma vaga ativa por 30 dias, sem assinatura. Para quem contrata raramente.' },
+          { id: 'destaque', nome: 'Destaque de vaga', preco: 'US$ 29–49 por 30 dias', pendente: true,
+            texto: 'A vaga vai para o topo das buscas e indicações, com o selo "Patrocinada".' }
+        ],
+        diasDestaque: 30
       },
 
       // Opções do perfil da empresa.

@@ -25,7 +25,8 @@
     minus: '<path d="M5 12h14"/>',
     send: '<path d="M4 12l16-8-6 16-3-6-7-2z"/>',
     pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
-    bookmark: '<path d="M6 3.5h12v17l-6-4-6 4z"/>'
+    bookmark: '<path d="M6 3.5h12v17l-6-4-6 4z"/>',
+    spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'
   };
 
   function icon(name, size, opts) {
@@ -218,6 +219,9 @@
     s.empresaPerfil = s.empresaPerfil || null; // dados da empresa editados em minha-empresa.html
     s.naoMsg = s.naoMsg || {};           // "vagaId:profId" -> mensagem enviada ao marcar como não selecionado
     s.revisao = s.revisao || {};         // vagaId -> { tipo: 'corrigido' | 'mantido', texto } (resposta à contestação do combinado)
+    s.planoFase = s.planoFase || null;   // null (período grátis) | 'encerrado' (vagas pausadas) | 'assinado'
+    s.avulsas = s.avulsas || 0;          // vagas avulsas compradas (cada uma libera mais uma vaga ativa)
+    s.destaques = s.destaques || {};     // vagaId -> data ISO em que o destaque ("Patrocinada") termina
     if (!s.salvos) {                     // profId -> true (talentos salvos; começa com os do mock)
       s.salvos = {};
       E().salvos.forEach(function (id) { s.salvos[id] = true; });
@@ -435,7 +439,11 @@
     }));
   }
   // Status atual da vaga: o definido na sessão (pausar, cancelar, reabrir…) ou o do mock.
-  function statusVaga(s, v) { return s.statusVaga[v.id] || v.status; }
+  // Com o período grátis encerrado e sem plano escolhido, as vagas abertas ficam pausadas (não apagadas).
+  function statusVaga(s, v) {
+    var st = s.statusVaga[v.id] || v.status;
+    return st === 'Aberta' && s.planoFase === 'encerrado' ? 'Pausada' : st;
+  }
   function vagaPorId(s, id) { return todasVagas(s).filter(function (v) { return v.id === id; })[0]; }
   function requisitosDe(v) { return v.requisitosTotal || E().requisitosPadrao; }
   function nota(n) { return parseFloat(String(n).replace(',', '.')); }
@@ -1232,6 +1240,14 @@
         if (c.status === 'novo' && c.data && prazoVencido(c.data)) atrasados.push({ v: v, c: c });
       });
     });
+    var piHome = planoInfo(s);
+    if (piHome.fase === 'encerrado' || (!piHome.fase && piHome.dias <= 7)) {
+      itens++;
+      pend = rowLink({ icone: 'clock', tom: 'amber',
+        titulo: piHome.fase === 'encerrado' ? 'Seu período grátis terminou' : 'Faltam ' + plural(piHome.dias, 'dia', 'dias') + ' do período grátis',
+        texto: piHome.fase === 'encerrado' ? 'Suas vagas abertas foram pausadas, sem ser apagadas. Escolha um plano para reativar.' : 'Escolha entre assinar o Essencial ou usar as opções avulsas. Suas vagas não são apagadas.',
+        href: 'planos.html' }) + pend;
+    }
     if (atrasados.length) {
       itens++;
       pend = rowLink({ icone: 'clock', tom: 'amber',
@@ -1394,6 +1410,48 @@
       '</div>';
   }
 
+  /* ----- Ajuda da IA para redigir a vaga (seção 12) — simulada no protótipo ----- */
+
+  var IA_FUNCOES = [
+    { re: /recep/, titulo: 'Recepcionista', tarefas: 'receber clientes e visitantes, organizar a agenda e atender o telefone', comps: ['Atendimento ao público', 'Agenda e telefonia', 'Pacote Office'] },
+    { re: /suporte|chat|sac|call/, titulo: 'Atendente de suporte', tarefas: 'atender clientes por chat, e-mail e telefone e resolver as solicitações', comps: ['Atendimento ao cliente', 'Comunicação escrita', 'Sistemas de cadastro'] },
+    { re: /atend|loja|vend|balc/, titulo: 'Atendente de loja', tarefas: 'atender os clientes, organizar o espaço de vendas e apoiar o caixa', comps: ['Atendimento ao público', 'Vendas', 'Organização'] },
+    { re: /admin|escrit|assist/, titulo: 'Assistente administrativo', tarefas: 'organizar documentos, apoiar as rotinas do escritório e atender ligações', comps: ['Rotinas administrativas', 'Pacote Office', 'Organização de documentos'] },
+    { re: /gar[cç]|restaur|cozinh/, titulo: 'Garçom', tarefas: 'atender as mesas, anotar os pedidos e manter o salão organizado', comps: ['Atendimento ao público', 'Trabalho em equipe', 'Agilidade'] },
+    { re: /limp|faxin|conserv/, titulo: 'Auxiliar de limpeza', tarefas: 'manter os ambientes limpos e organizados', comps: ['Organização', 'Atenção aos detalhes', 'Trabalho em equipe'] },
+    { re: /estoq|logist|almox/, titulo: 'Auxiliar de estoque', tarefas: 'receber, conferir e organizar as mercadorias', comps: ['Organização de estoque', 'Conferência de mercadorias', 'Trabalho em equipe'] }
+  ];
+
+  // Sugestão de título, descrição e competências a partir de uma descrição curta. Toda sugestão
+  // mostra o motivo, e temas proibidos (idade, gênero, origem…) são descartados.
+  function sugerirVaga(texto) {
+    var t = semAcento(texto), motivos = [];
+    var proibidos = termosProibidosEm(texto);
+    // Faixa de idade escrita como "até 30 anos", "entre 18 e 25 anos"… também é tema proibido.
+    if (/\b(ate|entre|de|acima de|abaixo de|maiores? de|menores? de)\s*\d{1,2}(\s*(a|e)\s*\d{1,2})?\s*anos\b/.test(t) && proibidos.indexOf('idade') === -1) proibidos.push('idade');
+    var fn = IA_FUNCOES.filter(function (x) { return x.re.test(t); })[0];
+    var titulo = fn ? fn.titulo : (texto.split(/[,.]/)[0].trim().replace(/^./, function (c) { return c.toUpperCase(); }) || 'Profissional');
+    motivos.push(fn ? 'Título, tarefas e competências comuns para “' + fn.titulo.toLowerCase() + '”.' : 'Título a partir do início da sua descrição.');
+    var ctx = (texto.match(/\bpara (um |uma |o |a )?([^,.]+?)(,|\.|$)/i) || [])[2];
+    if (ctx && termosProibidosEm(ctx).length) ctx = null;
+    var hor = (texto.match(/(seg(unda)?\.? a (sex|s[áa]b)[^,.]*|\d{1,2}h[^,.]*)/i) || [])[1];
+    var idi = (texto.match(/(ingl[eê]s|espanhol|franc[eê]s)( (b[áa]sico|intermedi[áa]rio|avan[çc]ado|fluente))?/i) || [])[0];
+    var modelo = /remot/.test(t) ? 'remoto' : (/hibrid/.test(t) ? 'hibrido' : (/presencial/.test(t) ? 'presencial' : ''));
+    var tipo = /meio periodo|part/.test(t) ? 'Meio período' : (/tempor/.test(t) ? 'Temporário' : (/freela/.test(t) ? 'Freelancer' : (/integral/.test(t) ? 'Tempo integral' : '')));
+    if (ctx) motivos.push('Contexto citado: ' + ctx.trim() + '.');
+    if (hor) motivos.push('Horário citado: ' + hor.trim() + '.');
+    if (idi) motivos.push('Idioma citado: ' + idi + '.');
+    if (modelo) motivos.push('Modelo de trabalho citado: ' + modeloRotulo(modelo) + '.');
+    if (tipo) motivos.push('Tipo de contratação citado: ' + tipo + '.');
+    var desc = 'Buscamos ' + titulo.toLowerCase() + ' para ' + (ctx ? ctx.trim() : 'a nossa equipe') + '. No dia a dia, você vai ' +
+      (fn ? fn.tarefas : 'apoiar a equipe nas atividades da função') + '.' +
+      (hor ? ' Horário: ' + hor.trim() + '.' : '') + (idi ? ' Desejável: ' + idi.toLowerCase() + '.' : '') +
+      ' Valorizamos boa comunicação, pontualidade e vontade de aprender.';
+    var comps = (fn ? fn.comps : ['Comunicação', 'Trabalho em equipe']).slice();
+    if (idi) comps.push(idi.split(' ')[0].replace(/^./, function (c) { return c.toUpperCase(); }));
+    return { titulo: titulo, descricao: desc, competencias: comps, modelo: modelo, tipo: tipo, motivos: motivos, proibidos: proibidos };
+  }
+
   // Dados de uma vaga para preencher o formulário de edição: os da vaga publicada na demonstração
   // ou, nas vagas do mock, os da mesma vaga no catálogo do profissional (quando existe).
   function dadosDaVaga(s, v) {
@@ -1424,6 +1482,11 @@
     $('#content').innerHTML =
       '<form id="vaga-form" class="form" novalidate>' +
       '<p class="form-note">Campos com <span aria-hidden="true">*</span><span class="visually-hidden">asterisco</span> são obrigatórios. A vaga descreve o trabalho, não a pessoa: por isso não há campos de idade, gênero, raça, religião, estado civil, nacionalidade ou foto.</p>' +
+      (editando ? '' : '<section class="card ia-card" id="ia-box"><div class="row-title">' + icon('spark', 18, { stroke: 2 }) + ' Redigir com ajuda da IA</div>' +
+        '<p class="row-sub">Descreva a vaga em poucas palavras e receba uma sugestão de título, descrição e competências. Você revisa antes de publicar.</p>' +
+        field('ia-texto', 'Descrição curta', 'textarea', 'rows="2" maxlength="200" placeholder="Ex.: recepcionista para clínica, seg a sex 8h às 17h, inglês básico"', '') +
+        '<div class="btn-row"><button type="button" class="btn btn-outline" id="ia-gerar">Gerar sugestão</button></div>' +
+        '<div id="ia-resultado" aria-live="polite"></div></section>') +
 
       field('titulo', 'Título da vaga', 'input', 'type="text" maxlength="80" autocomplete="off" placeholder="Ex.: Recepcionista"', '', { req: true }) +
       field('descricao', 'Descrição', 'textarea', 'rows="5" maxlength="1500" placeholder="O que a pessoa vai fazer, em que horários, com quem vai trabalhar…"', '',
@@ -1669,6 +1732,37 @@
       return v;
     }
 
+    // Ajuda da IA: gera a sugestão e só preenche o formulário quando a empresa aceita.
+    var sugestao = null;
+    if ($('#ia-gerar')) {
+      $('#ia-gerar').addEventListener('click', function () {
+        var texto = $('#ia-texto').value.trim();
+        if (!check([{ id: 'ia-texto', ok: texto.length >= 5, msg: 'Descreva a vaga em algumas palavras (ex.: “atendente de loja, sábados”).' }])) return;
+        sugestao = sugerirVaga(texto);
+        $('#ia-resultado').innerHTML = '<div class="ia-sugestao"><p class="ia-tag">Sugestão da IA · simulada no protótipo</p>' +
+          '<dl class="summary"><div><dt>Título</dt><dd>' + esc(sugestao.titulo) + '</dd></div>' +
+          '<div><dt>Descrição</dt><dd>' + esc(sugestao.descricao) + '</dd></div>' +
+          '<div><dt>Competências</dt><dd>' + esc(sugestao.competencias.join(', ')) + '</dd></div></dl>' +
+          '<p class="row-sub"><strong>Por quê:</strong> ' + esc(sugestao.motivos.join(' ')) + '</p>' +
+          (sugestao.proibidos.length ? '<p class="note note-box" id="ia-proibidos">' + icon('eye', 16, { stroke: 2 }) + '<span>Ignoramos: ' + esc(sugestao.proibidos.join(', ')) + '. A vaga descreve o trabalho, não a pessoa.</span></p>' : '') +
+          '<div class="btn-row"><button type="button" class="btn btn-primary" id="ia-usar">Usar sugestão</button></div>' +
+          '<p class="row-sub">A IA só sugere: você revisa e decide o que publicar.</p></div>';
+        $('#ia-usar').addEventListener('click', function () {
+          $('#titulo').value = sugestao.titulo;
+          $('#descricao').value = sugestao.descricao;
+          sugestao.competencias.forEach(function (c) {
+            if (!lista.competencias.some(function (x) { return x.toLowerCase() === c.toLowerCase(); })) lista.competencias.push(c);
+          });
+          renderChips('competencias');
+          if (sugestao.modelo) { form.querySelector('input[name="modelo"][value="' + sugestao.modelo + '"]').checked = true; mostrarLocal(sugestao.modelo); }
+          if (sugestao.tipo) $('#tipo').value = sugestao.tipo;
+          say('Sugestão aplicada. Revise os campos antes de publicar.');
+          toast('Sugestão aplicada. Revise antes de publicar.');
+          $('#titulo').focus();
+        });
+      });
+    }
+
     var rascBtn = $('#salvar-rascunho');
     if (rascBtn) rascBtn.addEventListener('click', function () {
       if (!check([{ id: 'titulo', ok: val('titulo').length >= 3, msg: 'Para salvar o rascunho, informe pelo menos o título (3 letras).' }])) return;
@@ -1719,6 +1813,10 @@
       $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
       if (!ok) return;
 
+      if ((!editando || ehRascunho) && !podeAbrirVaga(load())) {
+        $('#form-status').innerHTML = esc(msgLimiteVagas(load())) + ' <a href="planos.html">Ver planos e opções avulsas</a>';
+        return;
+      }
       var v = gravar(editando ? (ehRascunho ? 'Aberta' : null) : 'Aberta');
       if (editando && !ehRascunho) {
         subTopbar('Editar vaga', 'vagas.html');
@@ -2516,6 +2614,8 @@
       var r = regraLocal(localVagaJob(vagaJob(id)), pl);
       if (r.ok) dentro.push(id); else fora.push({ id: id, motivo: r.motivo });
     });
+    // Vaga patrocinada vem primeiro nas indicações também (sem furar a regra de localização).
+    dentro.sort(function (a, b) { return (jobPatrocinado(a) ? 0 : 1) - (jobPatrocinado(b) ? 0 : 1); });
     return { dentro: dentro, fora: fora };
   }
 
@@ -2532,7 +2632,8 @@
       '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">' +
         '<div class="row-main"><h3 class="row-title vaga-title"><a href="vaga.html?id=' + q(v.id) + '" class="card-link">' + esc(v.titulo) + '</a></h3>' +
         '<div class="row-sub">' + empresaLink(v.empresa) + ' · ' + esc(v.modelo) + ' · ' + esc(v.tipo) + '</div>' +
-        '<div class="row-sub loc-line">' + esc(localVagaTexto(v)) + '</div></div>' +
+        '<div class="row-sub loc-line">' + esc(localVagaTexto(v)) + '</div>' +
+        (jobPatrocinado(v.id) ? '<div><span class="chip lime">Patrocinada</span></div>' : '') + '</div>' +
         matchRing(c.atende, c.total) + '</div>' +
       repEmpresa + extra + '</article>';
   }
@@ -3404,8 +3505,11 @@
     var grupos = E().estadosVaga;
     var grupo = params.get('grupo');
     var confirmando = null; // id da vaga com o pedido de cancelamento aberto
+    var destacando = null;  // id da vaga com a oferta de destaque aberta
 
+    var s0 = load();
     $('#content').innerHTML =
+      (s0.planoFase === 'encerrado' ? '<p class="note note-box" id="plano-aviso">' + icon('clock', 16, { stroke: 2 }) + '<span>Seu período grátis terminou: as vagas abertas foram pausadas, sem ser apagadas. <a href="planos.html">Escolha um plano</a> para reativar.</span></p>' : '') +
       '<div class="head-row"><p class="row-sub">Pause, edite, cancele ou reabra suas vagas.</p>' +
         '<a href="publicar-vaga.html" class="btn btn-lime">' + icon('plus', 16, { stroke: 2.4 }) + 'Nova vaga</a></div>' +
       '<div class="filter" role="group" aria-label="Filtrar vagas por estado" id="vagas-filter"></div>' +
@@ -3422,7 +3526,8 @@
       var cand = '<a href="candidatos.html?vaga=' + q(v.id) + '" class="btn btn-primary">Ver candidatos</a>';
       var editar = '<a href="publicar-vaga.html?editar=' + q(v.id) + '" class="btn btn-outline">Editar</a>';
       if (st === 'Aberta') b = [cand, editar, '<button type="button" class="btn btn-outline" data-acao="pausar" data-id="' + esc(v.id) + '">Pausar</button>',
-        '<button type="button" class="btn btn-outline" data-acao="cancelar" data-id="' + esc(v.id) + '">Cancelar vaga</button>'];
+        '<button type="button" class="btn btn-outline" data-acao="cancelar" data-id="' + esc(v.id) + '">Cancelar vaga</button>'].concat(
+        destaqueAte(s, v.id) ? [] : ['<button type="button" class="btn btn-outline" data-acao="destacar" data-id="' + esc(v.id) + '">' + icon('star', 16, { stroke: 2 }) + 'Destacar</button>']);
       else if (st === 'Pausada') b = ['<button type="button" class="btn btn-primary" data-acao="reabrir" data-id="' + esc(v.id) + '">Reabrir</button>', editar,
         '<button type="button" class="btn btn-outline" data-acao="cancelar" data-id="' + esc(v.id) + '">Cancelar vaga</button>'];
       else if (st === 'Rascunho') b = ['<a href="publicar-vaga.html?editar=' + q(v.id) + '" class="btn btn-primary">Continuar editando</a>',
@@ -3450,7 +3555,13 @@
         var d = v.dados || dadosDaVaga(s, v);
         var meta = [plural(v.posicoes || 1, 'posição', 'posições')];
         if (d.modelo) meta.push(modeloRotulo(d.modelo) + (d.loc ? ' · ' + cidadeCurta(d.loc) : ''));
-        var corpo = confirmando === v.id
+        var dest = E().plano.avulsas.filter(function (a) { return a.id === 'destaque'; })[0];
+        var corpo = destacando === v.id
+          ? '<div class="card card-warn" id="destaque-box"><div class="row-title">Destacar “' + esc(v.titulo) + '” por ' + E().plano.diasDestaque + ' dias</div>' +
+            '<p class="row-sub">' + esc(dest.texto) + ' Preço: ' + esc(dest.preco) + ' (em definição). O destaque não fura a regra de reputação: uma empresa com reputação baixa comprovada não aparece para profissionais bem avaliados.</p>' +
+            '<div class="btn-row"><button type="button" class="btn btn-primary" data-acao="confirmar-destaque" data-id="' + esc(v.id) + '">Destacar por ' + E().plano.diasDestaque + ' dias</button>' +
+            '<button type="button" class="btn btn-outline" data-acao="voltar">Voltar</button></div></div>'
+          : confirmando === v.id
           ? '<div class="card-warn card" id="cancelar-box"><div class="row-title">Cancelar a vaga “' + esc(v.titulo) + '”?</div>' +
             '<p class="row-sub">' + (emAberto(s, v) ? plural(emAberto(s, v), 'candidato em aberto recebe', 'candidatos em aberto recebem') + ' o aviso de vaga encerrada automaticamente.' : 'Não há candidatos em aberto.') +
             ' Você pode reabrir a vaga depois.</p>' +
@@ -3460,7 +3571,9 @@
         return '<article class="card" data-vaga-card="' + esc(v.id) + '"><div class="head-row"><div class="row-main"><h3 class="row-title vaga-title">' + esc(v.titulo) + '</h3>' +
           '<div class="row-sub">' + esc(meta.join(' · ')) + '</div></div>' +
           '<span class="chip ' + info.chip + '">' + esc(info.status) + '</span></div>' +
-          '<p class="row-sub">' + esc(info.detalhe || '') + '</p>' + corpo + '</article>';
+          '<p class="row-sub">' + esc(info.detalhe || '') + '</p>' +
+          (destaqueAte(s, v.id) ? '<div class="chips"><span class="chip lime">' + icon('star', 12, { fill: 'currentColor', stroke: 1.5 }) + '&nbsp;Patrocinada até ' + dataBR(destaqueAte(s, v.id)) + '</span></div>' : '') +
+          corpo + '</article>';
       }).join('') : '<div class="empty"><p class="row-title">Nenhuma vaga em “' + esc(g.rotulo) + '”.</p></div>';
     }
 
@@ -3476,10 +3589,15 @@
       var acao = b.getAttribute('data-acao'), id = b.getAttribute('data-id');
       var st = load();
       var v = id ? vagaPorId(st, id) : null;
-      if (acao === 'cancelar') { confirmando = id; paint(); return; }
-      if (acao === 'voltar') { confirmando = null; paint(); return; }
+      if (acao === 'cancelar') { confirmando = id; destacando = null; paint(); return; }
+      if (acao === 'voltar') { confirmando = null; destacando = null; paint(); return; }
       if (acao === 'pausar') { st.statusVaga[id] = 'Pausada'; toast('Vaga pausada: ela sai da busca e das indicações até você reabrir.'); }
-      if (acao === 'reabrir') { st.statusVaga[id] = 'Aberta'; toast('Vaga reaberta. Quem já se candidatou pode se candidatar de novo.'); }
+      if (acao === 'reabrir') {
+        if (!podeAbrirVaga(st)) { toast(msgLimiteVagas(st)); return; }
+        st.statusVaga[id] = 'Aberta'; toast('Vaga reaberta. Quem já se candidatou pode se candidatar de novo.');
+      }
+      if (acao === 'destacar') { destacando = id; confirmando = null; paint(); return; }
+      if (acao === 'confirmar-destaque') { st.destaques[id] = isoMaisDias(E().plano.diasDestaque); destacando = null; toast('Vaga destacada por ' + E().plano.diasDestaque + ' dias (simulação).'); }
       if (acao === 'confirmar-cancelar') { st.statusVaga[id] = 'Cancelada'; confirmando = null; toast('Vaga cancelada. Os candidatos em aberto foram avisados.'); }
       if (acao === 'excluir') { st.vagas = st.vagas.filter(function (x) { return x.id !== id; }); toast('Rascunho excluído.'); }
       save(st);
@@ -3561,11 +3679,39 @@
     var pl = E().plano;
     var fim = new Date(pl.gratisDesde + 'T00:00:00');
     fim.setMonth(fim.getMonth() + pl.mesesGratis);
-    var dias = Math.max(0, Math.ceil((fim - new Date()) / 86400000));
+    var dias = s.planoFase === 'encerrado' ? 0 : Math.max(0, Math.ceil((fim - new Date()) / 86400000));
     var ativas = todasVagas(s).filter(function (v) { return statusVaga(s, v) === 'Aberta'; }).length;
     var convites = pl.convitesUsadosMes + Object.keys(s.convites).length;
     function dois(n) { return (n < 10 ? '0' : '') + n; }
-    return { pl: pl, fim: dois(fim.getDate()) + '/' + dois(fim.getMonth() + 1) + '/' + fim.getFullYear(), dias: dias, ativas: ativas, convites: convites };
+    return { pl: pl, fim: dois(fim.getDate()) + '/' + dois(fim.getMonth() + 1) + '/' + fim.getFullYear(), dias: dias, ativas: ativas, convites: convites,
+      fase: s.planoFase, limiteVagas: pl.limiteVagasAtivas + s.avulsas };
+  }
+
+  // Pode abrir mais uma vaga? (até 3 vagas ativas no Essencial, mais as vagas avulsas)
+  function podeAbrirVaga(s) {
+    var pi = planoInfo(s);
+    return pi.fase !== 'encerrado' && pi.ativas < pi.limiteVagas;
+  }
+  function msgLimiteVagas(s) {
+    var pi = planoInfo(s);
+    return pi.fase === 'encerrado'
+      ? 'Seu período grátis terminou. Escolha um plano para publicar ou reabrir vagas.'
+      : 'Seu plano permite até ' + plural(pi.limiteVagas, 'vaga ativa', 'vagas ativas') + '. Pause uma vaga ou use uma vaga avulsa.';
+  }
+
+  // Destaque de vaga (opção avulsa): "Patrocinada" até a data de fim.
+  function destaqueAte(s, vagaId) {
+    var fim = s.destaques[vagaId];
+    return fim && fim >= hojeISO() ? fim : null;
+  }
+  function jobPatrocinado(jobId) {
+    var id = vagaEmpresaDoJob(jobId);
+    return !!(id && destaqueAte(load(), id));
+  }
+  function isoMaisDias(n) {
+    var d = new Date(); d.setDate(d.getDate() + n);
+    function dois(x) { return (x < 10 ? '0' : '') + x; }
+    return d.getFullYear() + '-' + dois(d.getMonth() + 1) + '-' + dois(d.getDate());
   }
 
   function barra(usado, limite) {
@@ -3588,12 +3734,14 @@
           '<a href="perfil-empresa.html?id=empresa-exemplo" class="btn btn-outline">Ver como profissional</a></div></section>' +
 
         '<section class="card plan-card" aria-labelledby="h-plano"><div class="head-row"><h2 class="card-title" id="h-plano">Plano ' + esc(pi.pl.nome) + '</h2>' +
-          '<span class="chip lime">' + (pi.dias ? 'Grátis · ' + plural(pi.dias, 'dia restante', 'dias restantes') : 'Período grátis encerrado') + '</span></div>' +
-          '<p class="row-sub">Grátis até ' + pi.fim + ' (3 meses contados da primeira vaga publicada). Depois, ' + esc(pi.pl.preco) + '. O cartão só é pedido no fim do período.</p>' +
-          '<div class="usage-row"><span>Vagas ativas</span><b>' + pi.ativas + ' de ' + pi.pl.limiteVagasAtivas + '</b></div>' + barra(pi.ativas, pi.pl.limiteVagasAtivas) +
+          '<span class="chip lime">' + (pi.fase === 'assinado' ? 'Ativo' : (pi.dias ? 'Grátis · ' + plural(pi.dias, 'dia restante', 'dias restantes') : 'Período grátis encerrado')) + '</span></div>' +
+          '<p class="row-sub">' + (pi.fase === 'assinado' ? 'Assinatura ativa: ' + esc(pi.pl.preco) + '.'
+            : (pi.fase === 'encerrado' ? 'O período grátis terminou e suas vagas abertas foram pausadas, sem ser apagadas. Escolha um plano para reativar.'
+            : 'Grátis até ' + pi.fim + ' (3 meses contados da primeira vaga publicada). Depois, ' + esc(pi.pl.preco) + '. O cartão só é pedido no fim do período.')) + '</p>' +
+          '<div class="usage-row"><span>Vagas ativas</span><b>' + pi.ativas + ' de ' + pi.limiteVagas + '</b></div>' + barra(pi.ativas, pi.limiteVagas) +
           '<div class="usage-row"><span>Convites diretos este mês</span><b>' + pi.convites + ' de ' + pi.pl.limiteConvitesMes + '</b></div>' + barra(pi.convites, pi.pl.limiteConvitesMes) +
           '<p class="row-sub">Confirmar contratações e avaliar é sempre grátis.</p>' +
-          '<div class="btn-row"><button type="button" class="btn btn-outline" data-todo="' + TODO + '">Ver planos e opções avulsas</button></div></section>' +
+          '<div class="btn-row"><a href="planos.html" class="btn btn-outline">Ver planos e opções avulsas</a></div></section>' +
 
         '<section class="section"><h2>Sobre a empresa</h2><div class="card"><p class="prose">' + esc(e.descricao || 'Conte aos profissionais o que a empresa faz.') + '</p>' +
           '<dl class="summary">' + (e.site ? '<div><dt>Site</dt><dd>' + esc(e.site) + '</dd></div>' : '') +
@@ -3764,6 +3912,8 @@
         '<form id="perfil-form" class="form" novalidate><h2 class="page-title">Editar perfil</h2>' +
         field('pf-resumo', 'Título profissional', 'input', 'type="text" maxlength="60" value="' + esc(p.resumo) + '"', '', { req: true, hint: 'Ex.: Recepcionista · 3 anos de experiência' }) +
         field('pf-apres', 'Apresentação', 'textarea', 'rows="3" maxlength="300"', esc(p.apresentacao || ''), { hint: 'Até 300 caracteres.' }) +
+        '<div class="btn-row"><button type="button" class="btn btn-outline" id="pf-ia">' + icon('spark', 16, { stroke: 2 }) + 'Sugerir com IA</button></div>' +
+        '<p class="row-sub" id="pf-ia-motivo" aria-live="polite"></p>' +
         field('pf-disp', 'Disponibilidade', 'select', '', options(DISPONIBILIDADES)) +
         group('pf-tipos', 'Tipo de contratação que procuro', checkPills('pf-tipos', E().formulario.tipos.map(function (t) { return { id: t, rotulo: t }; }), p.tipos || [])) +
         group('pf-modelos', 'Modelos de trabalho que aceito', checkPills('pf-modelos', E().formulario.modelos, pl.modelos), { req: true }) +
@@ -3786,6 +3936,16 @@
       PARTES_VISIVEIS.forEach(function (x) { $('#vis-' + x.id).value = visibilidadeDe(p, x.id); });
       edComp.bind(); edCert.bind();
       $('#pf-cancelar').addEventListener('click', function () { ver(); window.scrollTo(0, 0); });
+      // Ajuda da IA para a apresentação (simulada): parte só do que já está no perfil.
+      $('#pf-ia').addEventListener('click', function () {
+        var cargos = [];
+        p.experienciaVerificada.forEach(function (x) { if (cargos.indexOf(x.cargo) === -1) cargos.push(x.cargo); });
+        function juntar(l, e) { return l.length > 1 ? l.slice(0, -1).join(', ') + ' ' + e + ' ' + l[l.length - 1] : (l[0] || ''); }
+        var txt = 'Tenho experiência verificada como ' + juntar(cargos, 'e').toLowerCase() + ', com foco em ' + juntar(comps.slice(0, 2), 'e').toLowerCase() + '. ' +
+          'Busco ' + (juntar(marcados('pf-tipos'), 'ou').toLowerCase() || 'uma oportunidade') + ', em trabalho ' + juntar(marcados('pf-modelos').map(modeloRotulo), 'ou').toLowerCase() + '.';
+        $('#pf-apres').value = txt.slice(0, 300);
+        $('#pf-ia-motivo').textContent = 'Sugestão da IA (simulada) a partir das suas experiências verificadas, competências e do trabalho que você procura. Revise antes de salvar.';
+      });
       $('#perfil-form').addEventListener('submit', function (ev) {
         ev.preventDefault();
         var mods = marcados('pf-modelos');
@@ -3819,6 +3979,77 @@
     }
 
     ver();
+  }
+
+  /* ---------- Empresa: planos e opções avulsas (seção 16) ---------- */
+
+  function renderPlanos() {
+    subTopbar('Planos', 'minha-empresa.html');
+    $('#nav').innerHTML = empresaNav('empresa');
+    var avisoVisivel = false, assinando = false;
+
+    function paint() {
+      var s = load(), pi = planoInfo(s), pl = pi.pl;
+      var candidaturas = todasVagas(s).reduce(function (n, v) { return n + candidatosDe(s, v.id).length; }, 0);
+      var status = pi.fase === 'assinado' ? 'Plano Essencial ativo · ' + pl.preco
+        : (pi.fase === 'encerrado' ? 'Período grátis encerrado · vagas pausadas até você escolher'
+        : 'Período grátis · ' + plural(pi.dias, 'dia restante', 'dias restantes') + ' (até ' + pi.fim + ')');
+      $('#content').innerHTML =
+        '<section class="card plan-card" id="plano-status"><div class="row-title">' + esc(status) + '</div>' +
+          '<p class="row-sub">Os 3 meses grátis contam a partir da primeira vaga publicada e cobrem pelo menos um ciclo de contratação. O cartão só é pedido quando o período termina.</p></section>' +
+
+        '<section class="card" id="plano-essencial"><div class="head-row"><h2 class="card-title">Essencial</h2><span class="chip blue">' + esc(pl.preco) + '</span></div>' +
+          '<ul class="check-list">' + pl.inclui.map(function (x) { return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>'; }).join('') + '</ul>' +
+          (pi.fase === 'assinado' ? '<p class="row-sub">Você já assina o Essencial.</p>'
+            : (assinando
+              ? '<div class="card-warn card" id="assinar-box"><div class="row-title">Assinar o Essencial por ' + esc(pl.preco) + '</div>' +
+                '<p class="row-sub">No produto real, aqui entra o pagamento com cartão. Neste protótipo, nada é cobrado.</p>' +
+                '<div class="btn-row"><button type="button" class="btn btn-primary" data-plano="confirmar-assinatura">Confirmar assinatura (simulação)</button>' +
+                '<button type="button" class="btn btn-outline" data-plano="voltar">Voltar</button></div></div>'
+              : '<div class="btn-row"><button type="button" class="btn btn-primary" data-plano="assinar">Assinar o Essencial</button></div>')) + '</section>' +
+
+        '<section class="section"><h2>Opções avulsas</h2>' + pl.avulsas.map(function (a) {
+          return '<div class="card"><div class="head-row"><h3 class="card-title">' + esc(a.nome) + '</h3><span class="chip">' + esc(a.preco) + '</span></div>' +
+            '<p class="row-sub">' + esc(a.texto) + (a.pendente ? ' Preço em definição.' : '') + '</p>' +
+            (a.id === 'vaga-avulsa'
+              ? '<div class="btn-row"><button type="button" class="btn btn-outline" data-plano="avulsa">Usar uma vaga avulsa (simulação)</button></div>' +
+                (s.avulsas ? '<p class="row-sub">' + plural(s.avulsas, 'vaga avulsa ativa', 'vagas avulsas ativas') + ': o limite de vagas abertas subiu para ' + pi.limiteVagas + '.</p>' : '')
+              : '<div class="btn-row"><a href="vagas.html?grupo=abertas" class="btn btn-outline">Escolher a vaga para destacar</a></div>') + '</div>';
+        }).join('') + '</section>' +
+
+        '<section class="section"><h2>Regras que não mudam</h2><div class="card"><ul class="check-list">' +
+          ['Confirmar contratações e avaliar são sempre gratuitos.', 'Reputação não se compra: nenhum pagamento altera nota, ranking ou nível de reputação.',
+           'Destaque não fura a regra de reputação: empresa com reputação baixa comprovada não aparece para profissionais bem avaliados.', 'O profissional nunca paga para usar a plataforma.']
+            .map(function (x) { return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>'; }).join('') + '</ul></div></section>' +
+
+        '<section class="section"><h2>Simular o fim do período grátis</h2><div class="card">' +
+          '<p class="row-sub">Para a demonstração: veja o aviso enviado antes do fim (7 dias e 1 dia antes) e o que acontece quando o período termina.</p>' +
+          (avisoVisivel ? '<div class="card card-highlight" id="aviso-fim"><div class="row-title">Faltam 7 dias para o fim do seu período grátis</div>' +
+            '<p class="row-sub">Até agora, você recebeu ' + plural(candidaturas, 'candidatura', 'candidaturas') + ', confirmou ' + plural(E().reputacao.contratacoes, 'contratação', 'contratações') +
+            ' e tem nota ' + esc(E().reputacao.nota) + '. Para continuar, assine o Essencial ou use as opções avulsas. Suas vagas não são apagadas.</p></div>' : '') +
+          '<div class="btn-row"><button type="button" class="btn btn-outline" data-plano="ver-aviso">' + (avisoVisivel ? 'Esconder o aviso' : 'Ver o aviso de 7 dias') + '</button>' +
+          (pi.fase === 'encerrado'
+            ? '<button type="button" class="btn btn-outline" data-plano="voltar-gratis">Voltar ao período grátis</button>'
+            : '<button type="button" class="btn btn-outline" data-plano="encerrar">Simular o fim do período</button>') + '</div></div></section>' +
+        '<div class="visually-hidden" role="status" id="live"></div>';
+    }
+
+    $('#content').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-plano]');
+      if (!b) return;
+      var acao = b.getAttribute('data-plano'), st = load();
+      if (acao === 'assinar') assinando = true;
+      else if (acao === 'voltar') assinando = false;
+      else if (acao === 'confirmar-assinatura') { st.planoFase = 'assinado'; save(st); assinando = false; toast('Assinatura do Essencial ativa (simulação). Suas vagas voltaram a ficar abertas.'); }
+      else if (acao === 'avulsa') { st.avulsas++; save(st); toast('Vaga avulsa liberada por 30 dias (simulação).'); }
+      else if (acao === 'ver-aviso') avisoVisivel = !avisoVisivel;
+      else if (acao === 'encerrar') { st.planoFase = 'encerrado'; save(st); toast('Período grátis encerrado: as vagas abertas foram pausadas, sem ser apagadas.'); }
+      else if (acao === 'voltar-gratis') { st.planoFase = null; save(st); toast('De volta ao período grátis.'); }
+      paint();
+      say('Plano atualizado.');
+    });
+
+    paint();
   }
 
   /* ---------- Notificações (as duas jornadas) ---------- */
@@ -3993,10 +4224,28 @@
       field('f-fuso', 'Fuso horário', 'select', '', options(LOC().fusos, 'Qualquer fuso')) +
       '<div class="btn-row"><button type="button" class="btn btn-outline" id="f-limpar">Limpar filtros</button></div>';
 
+    // Demais filtros previstos na seção 10 (todos opcionais). Nenhum usa característica protegida por lei.
+    var setores = [];
+    Object.keys(window.MOCK.empresas).forEach(function (k) { var st = empresaDe(k).setor; if (setores.indexOf(st) === -1) setores.push(st); });
+    var maisFiltros =
+      group('f-tipo', 'Tipo de contratação', checkPills('f-tipo', f.tipos.map(function (t) { return { id: t, rotulo: t }; }), [])) +
+      field('f-idioma', 'Idioma', 'select', '', options(f.idiomas, 'Qualquer idioma')) +
+      field('f-rep', ehEmpresa ? 'Reputação mínima do profissional' : 'Reputação mínima da empresa', 'select', '',
+        '<option value="">Qualquer reputação</option><option value="4">Nota 4,0 ou mais</option><option value="4.5">Nota 4,5 ou mais</option><option value="4.8">Nota 4,8 ou mais</option>',
+        { hint: 'Quem ainda não tem avaliações (reputação em construção) não entra quando este filtro está ligado.' }) +
+      (ehEmpresa ? '' :
+        group('f-sal', 'Salário a partir de',
+          '<div class="form-grid"><label class="mini"><span>Moeda</span><select id="f-sal-moeda">' + options(f.moedas) + '</select></label>' +
+          '<label class="mini"><span>Período</span><select id="f-sal-periodo">' + options(f.periodos) + '</select></label>' +
+          '<label class="mini"><span>Valor</span><input id="f-sal-valor" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label></div>',
+          { hint: 'Mostra as vagas com a faixa salarial que chega a esse valor, na mesma moeda e período.' }) +
+        field('f-area', 'Área', 'select', '', options(setores, 'Qualquer área')));
+
     $('#content').innerHTML =
       '<div class="field"><label for="busca-texto">' + (ehEmpresa ? 'Nome, função ou competência' : 'Cargo, empresa ou competência') + '</label>' +
         '<input id="busca-texto" type="search" autocomplete="off" placeholder="' + (ehEmpresa ? 'Ex.: Recepcionista' : 'Ex.: Atendente') + '"></div>' +
       accordion('acc-filtros', 'Filtros de localização', 'Nenhum filtro', filtros) +
+      accordion('acc-mais', 'Mais filtros', 'Nenhum filtro', maisFiltros) +
       '<p class="row-sub" id="busca-count" role="status" aria-live="polite"></p>' +
       '<div class="section" id="busca-list"></div>';
 
@@ -4012,9 +4261,19 @@
         modelos: $all('input[name="f-modelo"]:checked').map(function (i) { return i.value; }),
         mudar: ehEmpresa && $('#f-mudar-in').checked,
         salvos: ehEmpresa && $('#f-salvos-in').checked,
-        fuso: $('#f-fuso').value === '' ? null : Number($('#f-fuso').value)
+        fuso: $('#f-fuso').value === '' ? null : Number($('#f-fuso').value),
+        tipos: marcados('f-tipo'),
+        idioma: $('#f-idioma').value,
+        repMin: $('#f-rep').value ? Number($('#f-rep').value) : null,
+        salario: !ehEmpresa && $('#f-sal-valor').value ? { valor: Number($('#f-sal-valor').value), moeda: $('#f-sal-moeda').value, periodo: $('#f-sal-periodo').value } : null,
+        area: ehEmpresa ? '' : $('#f-area').value
       };
     }
+
+    function nMais(fl) {
+      return [fl.tipos.length, fl.idioma, fl.repMin != null, fl.salario, fl.area].filter(Boolean).length;
+    }
+    function falaIdioma(lista, idioma) { return (lista || []).some(function (i) { return i.split(' · ')[0] === idioma; }); }
 
     function nAtivos(fl) {
       return [fl.dist, fl.pais, fl.estado, fl.cidade, fl.modelos.length, fl.mudar, fl.salvos, fl.fuso != null].filter(Boolean).length;
@@ -4040,8 +4299,18 @@
         if (!passaLocal(x.vl.loc, fl)) return false;
         if (fl.modelos.length && fl.modelos.indexOf(x.vl.modelo) === -1) return false;
         if (fl.fuso != null && (x.vl.fuso != null ? x.vl.fuso : fusoDe(x.vl.loc)) !== fl.fuso) return false;
+        if (fl.tipos.length && fl.tipos.indexOf(v.tipo) === -1) return false;
+        if (fl.idioma && !falaIdioma(v.idiomas, fl.idioma)) return false;
+        if (fl.repMin != null && (e.novo || nota(e.nota) < fl.repMin)) return false;
+        if (fl.salario && !(v.salario && v.salario.moeda === fl.salario.moeda && v.salario.periodo === fl.salario.periodo && v.salario.max >= fl.salario.valor)) return false;
+        if (fl.area && e.setor !== fl.area) return false;
         return true;
-      }).sort(function (a, b) { return (a.km == null ? Infinity : a.km) - (b.km == null ? Infinity : b.km); });
+      }).sort(function (a, b) {
+        // Vaga patrocinada vem primeiro (sem furar os filtros nem a regra de reputação); depois, a mais perto.
+        var pa = jobPatrocinado(a.v.id) ? 0 : 1, pb = jobPatrocinado(b.v.id) ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        return (a.km == null ? Infinity : a.km) - (b.km == null ? Infinity : b.km);
+      });
     }
 
     function resultadosProfissionais(fl) {
@@ -4056,6 +4325,10 @@
         if (fl.mudar && !x.pl.aceitaMudar) return false;
         if (fl.salvos && !load().salvos[x.id]) return false;
         if (fl.fuso != null && x.pl.fuso !== fl.fuso) return false;
+        // Sem tipo de contratação informado no perfil, a pessoa aceita qualquer tipo.
+        if (fl.tipos.length && x.p.tipos && !fl.tipos.some(function (t) { return x.p.tipos.indexOf(t) !== -1; })) return false;
+        if (fl.idioma && !falaIdioma(x.p.idiomas, fl.idioma)) return false;
+        if (fl.repMin != null && (x.p.novo || nota(x.p.nota) < fl.repMin)) return false;
         return true;
       }).sort(function (a, b) { return a.km - b.km; });
     }
@@ -4077,6 +4350,8 @@
       var fl = lerFiltros();
       var n = nAtivos(fl);
       $('#acc-filtros-sum').textContent = n ? plural(n, 'filtro ativo', 'filtros ativos') : 'Nenhum filtro';
+      var nm = nMais(fl);
+      $('#acc-mais-sum').textContent = nm ? plural(nm, 'filtro ativo', 'filtros ativos') : 'Nenhum filtro';
       var lista = ehEmpresa ? resultadosProfissionais(fl) : resultadosVagas(fl);
       $('#busca-count').textContent = ehEmpresa
         ? plural(lista.length, 'profissional encontrado', 'profissionais encontrados')
@@ -4087,11 +4362,12 @@
           '<p class="row-sub">Tente ampliar a distância ou limpar algum filtro.</p></div>';
     }
 
+    if ($('#f-sal-periodo')) $('#f-sal-periodo').value = 'mes';
     $('#content').addEventListener('input', paint);
     $('#content').addEventListener('change', paint);
     $('#f-limpar').addEventListener('click', function () {
       $('#busca-texto').value = '';
-      ['#f-dist', '#f-pais', '#f-estado', '#f-cidade', '#f-fuso'].forEach(function (sel) { $(sel).value = ''; });
+      ['#f-dist', '#f-pais', '#f-estado', '#f-cidade', '#f-fuso', '#f-idioma', '#f-rep', '#f-sal-valor', '#f-area'].forEach(function (sel) { if ($(sel)) $(sel).value = ''; });
       $all('#content input[type="checkbox"]').forEach(function (i) { i.checked = false; });
       paint();
     });
@@ -4133,7 +4409,8 @@
     vagas: renderVagas,
     'minha-empresa': renderMinhaEmpresa,
     'meu-perfil': renderMeuPerfil,
-    notificacoes: renderNotificacoes
+    notificacoes: renderNotificacoes,
+    planos: renderPlanos
   };
   if (PAGES[page]) PAGES[page]();
 })();
