@@ -38,25 +38,17 @@ Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num n
 
 ### Modelos de e-mail em português
 
-Em **Authentication → Emails → Templates**:
+Os dois e-mails da conta, com a identidade do Match, estão em `supabase/templates/`. Em
+**Authentication → Emails → Templates**, abra cada modelo, troque o assunto e cole o arquivo
+inteiro no campo de HTML:
 
-**Confirm signup**: assunto `Confirme sua conta no KORbuild Match`
+| Modelo no Supabase | Assunto | Arquivo |
+| --- | --- | --- |
+| Confirm signup | Confirme sua conta no KORbuild Match | `supabase/templates/confirmar-cadastro.html` |
+| Reset password | Crie uma nova senha no KORbuild Match | `supabase/templates/nova-senha.html` |
 
-```html
-<h2>Falta só confirmar seu e-mail</h2>
-<p>Olá! Toque no botão para ativar sua conta no KORbuild Match.</p>
-<p><a href="{{ .ConfirmationURL }}">Confirmar minha conta</a></p>
-<p>Se você não criou esta conta, ignore este e-mail.</p>
-```
-
-**Reset password**: assunto `Crie uma nova senha no KORbuild Match`
-
-```html
-<h2>Nova senha</h2>
-<p>Recebemos um pedido para trocar a senha da sua conta. Toque no botão para criar uma nova. O link vale por 1 hora.</p>
-<p><a href="{{ .ConfirmationURL }}">Criar nova senha</a></p>
-<p>Se não foi você, ignore este e-mail: sua senha continua a mesma.</p>
-```
+O e-mail de confirmação usa o nome e o tipo da conta enviados no cadastro: chama a pessoa pelo
+nome e mostra "O que vem depois" diferente para empresa e para profissional.
 
 ## 1. Aplicar o esquema
 
