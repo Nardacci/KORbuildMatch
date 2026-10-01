@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  KORbuild Match — testes automatizados (80 passos, ~353 verificações).
+  KORbuild Match — testes automatizados (80 passos, ~357 verificações).
   Abra este arquivo direto no navegador, lado a lado com o resto do protótipo
   (mesma pasta). Ele carrega o protótipo num iframe de 390px, simula os
   fluxos das duas jornadas e mostra PASS/FAIL de cada verificação ao lado.
@@ -1040,7 +1040,15 @@ var steps = [
     set('#cad-nome', 'Padaria Pão Bom'); set('#cad-email', 'dono@gmail.com'); set('#cad-pais', 'Brasil'); set('#cad-setor', 'Alimentação');
     set('#cad-senha', '12345678'); $('#cad-termos').click();
     submit('#cad-form');
-    L(/Verificar a empresa/.test(txt('.hero')) && /uso pessoal/.test(txt('#ver-form')), 'cadastro empresa: verificação por documento (e-mail pessoal)');
+    L(txt('#email-titulo') === 'Confirme seu e-mail' && txt('#email-destino') === 'dono@gmail.com', 'cadastro: tela de confirmação do e-mail com o endereço');
+    L(/Reenviar em \d+ s/.test(txt('#email-reenviar')) && $('#email-reenviar').getAttribute('aria-disabled') === 'true', 'confirmação: reenviar só depois da contagem');
+    L(/Confirme sua conta no KORbuild Match/.test(txt('.email-previa')) && /Olá, Padaria!/.test(txt('.email-corpo')), 'confirmação: prévia do e-mail');
+    $('#email-corrigir').click();
+    L($('#cad-email').value === 'dono@gmail.com' && $('#cad-nome').value === 'Padaria Pão Bom' && $('#cad-setor').value === 'Alimentação', 'corrigir o e-mail: formulário volta preenchido');
+    set('#cad-senha', '12345678'); $('#cad-termos').click();
+    submit('#cad-form');
+    $('#email-confirmar').click();
+    L(/Verificar a empresa/.test(txt('.hero')) && /uso pessoal/.test(txt('#ver-form')), 'cadastro empresa: depois de confirmar o e-mail, verificação por documento (e-mail pessoal)');
     set('#ver-doc', '12.345.678/0001-90'); submit('#ver-form');
     L(/verificação em análise/.test(txt('#cad-done')) && /3 meses grátis/.test(txt('#cadastro')), 'cadastro empresa: conta criada, verificação em análise');
     await clickNav($('#cad-entrar'));

@@ -26,6 +26,7 @@
     send: '<path d="M4 12l16-8-6 16-3-6-7-2z"/>',
     pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
     bookmark: '<path d="M6 3.5h12v17l-6-4-6 4z"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/>',
     spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'
   };
 
@@ -1178,6 +1179,8 @@
   function renderCadastro() {
     var role = params.get('como') === 'empresa' ? 'empresa' : 'profissional';
     var root = $('#cadastro');
+    var dados = {};      // o que já foi digitado (para voltar e corrigir o e-mail sem perder nada)
+    var timer = null;    // contagem para liberar o "Reenviar e-mail"
 
     function paint() {
       var ehEmpresa = role === 'empresa';
@@ -1212,8 +1215,13 @@
         '<p class="login-foot">Já tem conta? <a href="index.html">Entrar</a></p>';
 
       root.querySelectorAll('[data-cad-role]').forEach(function (b) {
-        b.addEventListener('click', function () { role = b.getAttribute('data-cad-role'); paint(); });
+        b.addEventListener('click', function () { role = b.getAttribute('data-cad-role'); dados = {}; paint(); });
       });
+      // Voltando para corrigir o e-mail: o formulário volta preenchido.
+      ['cad-nome', 'cad-email', 'cad-pais', 'cad-setor', 'cad-cidade', 'cad-titulo'].forEach(function (id) {
+        if ($('#' + id) && dados[id] != null) $('#' + id).value = dados[id];
+      });
+      if (dados.focoEmail) { $('#cad-email').focus(); $('#cad-email').select(); }
 
       $('#cad-form').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -1233,8 +1241,67 @@
         var ok = check(regras);
         $('#form-status').textContent = ok ? '' : 'Revise os campos destacados.';
         if (!ok) return;
-        if (ehEmpresa) verificar($('#cad-nome').value.trim(), email);
-        else concluido('Conta criada', 'Bem-vindo(a), ' + esc($('#cad-nome').value.trim().split(' ')[0]) + '! O próximo passo é completar o perfil: experiências, competências e o trabalho que você procura.', 'profissional');
+        ['cad-nome', 'cad-email', 'cad-pais', 'cad-setor', 'cad-cidade', 'cad-titulo'].forEach(function (id) { if ($('#' + id)) dados[id] = $('#' + id).value; });
+        var nome = $('#cad-nome').value.trim();
+        confirmarEmail(nome, email, function () {
+          if (ehEmpresa) verificar(nome, email);
+          else concluido('Conta criada', 'Bem-vindo(a), ' + esc(nome.split(' ')[0]) + '! O próximo passo é completar o perfil: experiências, competências e o trabalho que você procura.', 'profissional');
+        });
+      });
+    }
+
+    // Depois do cadastro: aviso de que um e-mail de confirmação foi enviado. A conta só fica ativa
+    // quando a pessoa toca no link do e-mail (no protótipo, a prévia do e-mail aparece na tela).
+    function confirmarEmail(nome, email, depois) {
+      var primeiro = nome.split(' ')[0];
+      root.innerHTML =
+        '<div class="login-card email-card"><div class="icon-tile lg blue">' + icon('mail', 30, { stroke: 2 }) + '</div>' +
+          '<h1 class="page-title" id="email-titulo" tabindex="-1">Confirme seu e-mail</h1>' +
+          '<p class="row-sub">Enviamos um link de confirmação para <strong id="email-destino">' + esc(email) + '</strong>. Abra o e-mail e toque em “Confirmar minha conta” para ativar o cadastro. O link vale por 24 horas.</p>' +
+          '<ul class="check-list"><li>' + icon('check', 16, { stroke: 2.6 }) + '<span>Não chegou em alguns minutos? Confira as pastas de spam e promoções.</span></li>' +
+            '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>Enquanto o e-mail não for confirmado, a conta não aparece para ' + (role === 'empresa' ? 'profissionais' : 'empresas') + '.</span></li></ul>' +
+          '<div class="btn-row"><button type="button" class="btn btn-outline" id="email-reenviar"></button>' +
+            '<button type="button" class="btn btn-outline" id="email-corrigir">Corrigir o e-mail</button></div>' +
+          '<p class="row-sub" id="email-status" role="status" aria-live="polite"></p></div>' +
+
+        '<section class="login-card email-previa" aria-labelledby="previa-h"><p class="ia-tag" id="previa-h">Prévia do e-mail · simulação</p>' +
+          '<dl class="summary"><div><dt>De</dt><dd>KORbuild Match &lt;nao-responda@korbuildmatch.com&gt;</dd></div>' +
+            '<div><dt>Para</dt><dd>' + esc(email) + '</dd></div>' +
+            '<div><dt>Assunto</dt><dd>Confirme sua conta no KORbuild Match</dd></div></dl>' +
+          '<div class="email-corpo"><p>Olá, ' + esc(primeiro) + '!</p><p>Falta só confirmar seu e-mail para ativar sua conta no KORbuild Match.</p>' +
+            '<button type="button" class="btn btn-primary" id="email-confirmar">Confirmar minha conta</button>' +
+            '<p class="row-sub">Se você não criou esta conta, ignore este e-mail.</p></div>' +
+          '<p class="row-sub">No produto, o botão fica dentro do e-mail. Aqui ele aparece na tela para a demonstração continuar.</p></section>';
+      $('#email-titulo').focus();
+
+      function contagem(seg) {
+        var b = $('#email-reenviar');
+        clearInterval(timer);
+        function tick() {
+          if (!b.isConnected) { clearInterval(timer); return; }
+          if (seg <= 0) { clearInterval(timer); b.textContent = 'Reenviar e-mail'; b.removeAttribute('aria-disabled'); return; }
+          b.textContent = 'Reenviar em ' + seg + ' s'; b.setAttribute('aria-disabled', 'true'); seg--;
+        }
+        tick();
+        timer = setInterval(tick, 1000);
+      }
+      contagem(60);
+
+      $('#email-reenviar').addEventListener('click', function () {
+        if (this.getAttribute('aria-disabled') === 'true') return;
+        $('#email-status').textContent = 'Enviamos um novo link para ' + email + '. O link anterior deixa de valer.';
+        contagem(60);
+      });
+      $('#email-corrigir').addEventListener('click', function () {
+        clearInterval(timer);
+        dados.focoEmail = true;
+        paint();
+        dados.focoEmail = false;
+      });
+      $('#email-confirmar').addEventListener('click', function () {
+        clearInterval(timer);
+        toast('E-mail confirmado.');
+        depois();
       });
     }
 
@@ -1246,7 +1313,7 @@
         '<div class="hero"><h1>Verificar a empresa</h1><p>Toda empresa é verificada antes de publicar vagas. Isso protege os profissionais de vagas falsas.</p></div>' +
         '<form class="login-card form" id="ver-form" novalidate>' +
           (porDominio
-            ? '<p class="note note-box" id="ver-dominio">' + icon('check', 16, { stroke: 2.4 }) + '<span>Vamos verificar ' + esc(nome) + ' pelo domínio do e-mail (@' + esc(dominio) + '). Você recebe um link de confirmação nesse endereço.</span></p>'
+            ? '<p class="note note-box" id="ver-dominio">' + icon('check', 16, { stroke: 2.4 }) + '<span>Vamos verificar ' + esc(nome) + ' pelo domínio do e-mail confirmado (@' + esc(dominio) + '). A análise termina em até 1 dia útil.</span></p>'
             : '<p class="note note-box">' + icon('eye', 16, { stroke: 2 }) + '<span>O e-mail @' + esc(dominio) + ' é de uso pessoal. Informe o número de registro da empresa para a verificação.</span></p>' +
               field('ver-doc', 'Número de registro da empresa', 'input', 'type="text" maxlength="30" placeholder="Ex.: CNPJ, EIN…"', '', { req: true })) +
           '<p class="form-status" id="form-status" role="alert"></p>' +
