@@ -1,6 +1,9 @@
 {
   "name": "korbuild-supabase-local",
   "private": true,
-  "description": "Supabase local mínimo para testes: PostgreSQL + PostgREST + login simulado.",
-  "dependencies": { "pg": "^8.13.0" }
+  "description": "Supabase local m\u00ednimo para testes: PostgreSQL + PostgREST + login simulado.",
+  "dependencies": {
+    "pg": "^8.13.0",
+    "smtp-server": "^3.13.6"
+  }
 }
