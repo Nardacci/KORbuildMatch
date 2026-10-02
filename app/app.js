@@ -32,6 +32,7 @@
     clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/>',
     message: '<path d="M4 5h16v11H9l-5 4z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    send: '<path d="M4 12l16-8-6 16-3-6-7-2z"/>',
     star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>'
   };
 
@@ -368,6 +369,8 @@
     });
   }
 
+  var contaCache = null;
+
   // Carrega o perfil da conta e a linha de empresa ou profissional.
   function carregarConta(s) {
     var uid = s.user.id;
@@ -380,7 +383,8 @@
         : sb.from('profissionais').select('*').eq('id', uid).maybeSingle();
       return Promise.all([q, sb.from('contatos').select('*').eq('user_id', uid).maybeSingle()]).then(function (rs) {
         if (rs[0].error) throw rs[0].error;
-        return { perfil: perfil, user: s.user, dados: rs[0].data, contato: rs[1].data };
+        contaCache = { perfil: perfil, user: s.user, dados: rs[0].data, contato: rs[1].data };
+        return contaCache;
       });
     });
   }
@@ -440,16 +444,17 @@
   function navBeta(tipo, atual) {
     var itens = tipo === 'empresa'
       ? [{ id: 'inicio', label: 'Início', icon: 'home', href: 'inicio.html' }, { id: 'vagas', label: 'Vagas', icon: 'briefcase', href: 'vagas.html' },
-        { id: 'candidatos', label: 'Candidatos', icon: 'users', href: 'candidatos.html' }, { id: 'mensagens', label: 'Mensagens', icon: 'message' },
+        { id: 'candidatos', label: 'Candidatos', icon: 'users', href: 'candidatos.html' }, { id: 'mensagens', label: 'Mensagens', icon: 'message', href: 'mensagens.html' },
         { id: 'perfil', label: 'Empresa', icon: 'building', href: 'perfil.html' }]
       : [{ id: 'inicio', label: 'Início', icon: 'home', href: 'inicio.html' }, { id: 'buscar', label: 'Buscar', icon: 'search', href: 'buscar.html' },
-        { id: 'candidaturas', label: 'Candidaturas', icon: 'clipboard', href: 'candidaturas.html' }, { id: 'mensagens', label: 'Mensagens', icon: 'message' },
+        { id: 'candidaturas', label: 'Candidaturas', icon: 'clipboard', href: 'candidaturas.html' }, { id: 'mensagens', label: 'Mensagens', icon: 'message', href: 'mensagens.html' },
         { id: 'perfil', label: 'Perfil', icon: 'user', href: 'perfil.html' }];
     $('#nav').innerHTML = itens.map(function (it) {
       var ativo = it.id === atual;
-      return '<a href="' + (it.href || '#') + '"' + (ativo ? ' aria-current="page"' : '') + (it.href ? '' : ' data-proxima') + '>' +
+      return '<a href="' + (it.href || '#') + '" data-nav="' + it.id + '"' + (ativo ? ' aria-current="page"' : '') + (it.href ? '' : ' data-proxima') + '>' +
         icon(it.icon, 24, { stroke: ativo ? 2 : 1.8 }) + esc(it.label) + '</a>';
     }).join('');
+    if (atual !== 'mensagens') marcarNaoLidas(contaCache);
   }
 
   document.addEventListener('click', function (e) {
@@ -813,7 +818,13 @@
             });
 
         return dados.then(function (x) {
+          return minhasConversas(conta).then(function (cvs) { x.cvs = cvs; return x; });
+        }).then(function (x) {
           var stats, principal, resumo;
+          var lado = empresa ? 'empresa' : 'profissional';
+          var semResp = x.cvs.filter(function (cv) { return semResposta(cv, lado); });
+          var linhaMsgs = semResp.length ? linha('mensagens.html?filtro=sem-resposta', 'message', plural(semResp.length, 'mensagem sem resposta', 'mensagens sem resposta'),
+            semResp.map(function (cv) { return nomeDoOutro(cv, lado); }).slice(0, 3).join(', ') + (semResp.length > 3 ? '…' : ''), 'msgs-sem-resposta', 'amber') : '';
           if (empresa) {
             var abertas = x.vagas.filter(function (v) { return v.status === 'aberta'; });
             var novos = x.cands.filter(function (c) { return c.status === 'novo'; });
@@ -825,6 +836,7 @@
             resumo = !publicouAlguma ? 'Tudo pronto para publicar a primeira vaga.'
               : (novos.length ? 'Você tem ' + plural(novos.length, 'candidato novo', 'candidatos novos') + ' para responder.' : 'Tudo em dia com os candidatos.');
             var pend = [];
+            if (linhaMsgs) pend.push(linhaMsgs);
             if (atrasados.length) pend.push(linha('candidatos.html?status=novo', 'clock', plural(atrasados.length, 'candidato esperando', 'candidatos esperando') + ' há mais de ' + D.prazoRespostaDias + ' dias',
               'Chame para conversa ou marque como não selecionado. A resposta garantida conta na sua reputação.', 'atrasados', 'amber'));
             abertas.forEach(function (v) {
@@ -859,6 +871,7 @@
             resumo = novasParaMim.length ? plural(novasParaMim.length, 'vaga combina', 'vagas combinam') + ' com você perto de ' + (d.cidade || 'você') + '.' : 'Seu perfil está completo e visível para as empresas.';
             principal =
               '<a href="buscar.html" class="row-link search-c" id="busca"><span>' + icon('search', 20, { stroke: 2 }) + '</span>Buscar vagas, cargos ou empresas</a>' +
+              (linhaMsgs ? '<section class="section" aria-labelledby="h-atencao-p"><h2 id="h-atencao-p">Precisa da sua atenção</h2>' + linhaMsgs + '</section>' : '') +
               '<section class="section" aria-labelledby="h-vagas"><div class="section-head"><h2 id="h-vagas">Vagas para você</h2>' + (perto.length ? '<a href="buscar.html">Ver todas</a>' : '') + '</div>' +
                 (perto.length ? perto.slice(0, 3).map(function (v) { return cartaoVaga(v, d, minhas); }).join('')
                   : '<div class="empty" id="sem-vagas"><p class="row-title">Ainda não há vagas perto de você</p>' +
@@ -1491,6 +1504,7 @@
       acoes = '<div class="btn-row">' +
         '<a href="ver-profissional.html?id=' + encodeURIComponent(c.profissional_id) + '&vaga=' + encodeURIComponent(c.vaga_id) + '" class="btn btn-outline">Ver perfil</a>' +
         (c.status === 'novo' ? '<button type="button" class="btn btn-primary" data-cand="conversa" data-id="' + c.id + '">Chamar para conversa</button>' : '') +
+        (c.status === 'conversa' ? '<button type="button" class="btn btn-primary" data-msg="' + c.id + '">' + icon('message', 16, { stroke: 2 }) + 'Mensagem</button>' : '') +
         (c.status === 'novo' || c.status === 'conversa' ? '<button type="button" class="btn btn-outline btn-quiet" data-cand="nao" data-id="' + c.id + '">Não selecionar</button>' : '') +
         (c.status === 'nao' ? '<button type="button" class="btn btn-outline btn-quiet" data-cand="novo" data-id="' + c.id + '">Desfazer</button>' : '') +
         '</div>';
@@ -1575,15 +1589,28 @@
     $('#content').addEventListener('click', function (e) {
       var f = e.target.closest('[data-status]');
       if (f) { filtro = f.getAttribute('data-status'); pintar(); return; }
+      var m = e.target.closest('[data-msg]');
+      if (m) {
+        var cm = cands.filter(function (x) { return x.id === m.getAttribute('data-msg'); })[0];
+        ocupado(m, true, 'Abrindo…');
+        abrirConversa(conta.dados.id, cm.profissional_id, v.id).catch(function (err) { ocupado(m, false); status(erroComDetalhe(err)); });
+        return;
+      }
       var b = e.target.closest('[data-cand]');
       if (!b) return;
       var novo = b.getAttribute('data-cand');
+      var cand = cands.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0];
       ocupado(b, true, 'Salvando…');
-      sb.from('candidaturas').update({ status: novo }).eq('id', b.getAttribute('data-id')).then(function (r) {
+      sb.from('candidaturas').update({ status: novo }).eq('id', cand.id).then(function (r) {
         if (r.error) { ocupado(b, false); status(erroComDetalhe(r.error)); return; }
-        toast({ conversa: 'Candidato chamado para conversa. As mensagens chegam na próxima etapa da beta.', nao: 'Candidato marcado como não selecionado. Ele vê o retorno nas candidaturas dele.', novo: 'Status desfeito.' }[novo]);
+        if (novo === 'conversa') {
+          var primeiro = ((cand.profissionais && cand.profissionais.nome) || '').split(' ')[0];
+          return abrirConversa(conta.dados.id, cand.profissional_id, v.id,
+            'Oi, ' + primeiro + '! Vimos sua candidatura para ' + v.titulo + ' e gostaríamos de conversar. Você tem disponibilidade esta semana?');
+        }
+        toast({ nao: 'Candidato marcado como não selecionado. Ele vê o retorno nas candidaturas dele.', novo: 'Status desfeito.' }[novo]);
         carregar();
-      });
+      }).catch(function (err) { ocupado(b, false); status(erroComDetalhe(err)); });
     });
   }
 
@@ -1752,6 +1779,7 @@
       else if (cand) acao = '<a href="candidaturas.html" class="btn btn-outline">' + icon('check', 16, { stroke: 2.4 }) + 'Candidatura ' + esc(minha.rotulo.toLowerCase()) + ' · ver status</a>';
       else if (aberta) acao = '<button type="button" class="btn btn-primary" id="candidatar">Candidatar-se</button>';
       else acao = '';
+      if (conta && conta.perfil.tipo === 'profissional') acao += '<button type="button" class="btn btn-outline" id="duvida">' + icon('message', 16, { stroke: 2 }) + 'Tirar dúvida com a empresa</button>';
 
       $('#content').innerHTML =
         '<section class="card"><h2 class="page-title vaga-h">' + esc(v.titulo) + '</h2>' +
@@ -1778,6 +1806,12 @@
           '<div class="chips"><span class="chip blue">Empresa nova · reputação em construção</span></div></div></section>';
       var b = $('#candidatar');
       if (b) b.addEventListener('click', formCandidatura);
+      var d = $('#duvida');
+      if (d) d.addEventListener('click', function () {
+        ocupado(d, true, 'Abrindo…');
+        abrirConversa(v.empresa_id, conta.user.id, v.id, 'Olá! Tenho uma dúvida sobre a vaga de ' + v.titulo + ': ')
+          .catch(function (err) { ocupado(d, false); status(erroComDetalhe(err)); });
+      });
     }
 
     function formCandidatura() {
@@ -1921,6 +1955,381 @@
     });
   }
 
+
+  /* =====================================================================
+   * ETAPA 4 — MENSAGENS
+   * ===================================================================== */
+
+  function horaCurta(iso) {
+    var d = new Date(iso), hoje = new Date();
+    function dois(n) { return (n < 10 ? '0' : '') + n; }
+    if (d.toDateString() === hoje.toDateString()) return dois(d.getHours()) + ':' + dois(d.getMinutes());
+    return dois(d.getDate()) + '/' + dois(d.getMonth() + 1);
+  }
+
+  function ladoDe(conta) { return conta.perfil.tipo === 'empresa' ? 'empresa' : 'profissional'; }
+  function outroLado(lado) { return lado === 'empresa' ? 'profissional' : 'empresa'; }
+
+  // Não lida: a última mensagem é do outro lado e chegou depois da última leitura.
+  function naoLida(cv, lado) {
+    if (!cv.ultima_mensagem_em || cv.ultima_mensagem_de === lado) return false;
+    var lido = cv['lido_' + lado + '_em'];
+    return !lido || new Date(lido) < new Date(cv.ultima_mensagem_em);
+  }
+  function semResposta(cv, lado) { return !!cv.ultima_mensagem_em && cv.ultima_mensagem_de !== lado; }
+
+  function esperandoHa(iso) {
+    var dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (dias <= 0) return 'Esperando desde hoje';
+    if (dias === 1) return 'Esperando desde ontem';
+    return 'Esperando há ' + dias + ' dias';
+  }
+
+  function nomeDoOutro(cv, lado) {
+    return lado === 'empresa' ? ((cv.profissionais && cv.profissionais.nome) || 'Profissional') : ((cv.empresas && cv.empresas.nome) || 'Empresa');
+  }
+
+  var SELECT_CONVERSA = '*, profissionais(id, nome, resumo, cidade, estado), empresas(id, nome), vagas(id, titulo, empresa_id)';
+
+  function minhasConversas(conta) {
+    var q = sb.from('conversas').select(SELECT_CONVERSA).order('ultima_mensagem_em', { ascending: false, nullsFirst: false });
+    q = ladoDe(conta) === 'empresa' ? q.eq('empresa_id', conta.dados.id) : q.eq('profissional_id', conta.user.id);
+    return q.then(function (r) { if (r.error) throw r.error; return r.data || []; });
+  }
+
+  // Abre (ou reaproveita) a conversa do par empresa–profissional e vai para ela.
+  function abrirConversa(empresaId, profissionalId, vagaId, texto) {
+    return sb.from('conversas').select('id, vaga_id').eq('empresa_id', empresaId).eq('profissional_id', profissionalId).maybeSingle().then(function (r) {
+      if (r.error) throw r.error;
+      if (r.data) return r.data;
+      return sb.from('conversas').insert({ empresa_id: empresaId, profissional_id: profissionalId, vaga_id: vagaId || null })
+        .select('id, vaga_id').maybeSingle().then(function (r2) {
+          if (r2.error) {
+            // Outra aba criou ao mesmo tempo: busca de novo.
+            if (r2.error.code === '23505') return sb.from('conversas').select('id, vaga_id').eq('empresa_id', empresaId).eq('profissional_id', profissionalId).maybeSingle().then(function (r3) { return r3.data; });
+            throw r2.error;
+          }
+          return r2.data;
+        });
+    }).then(function (cv) {
+      ir('conversa.html?id=' + encodeURIComponent(cv.id) + (texto ? '&texto=' + encodeURIComponent(texto) : ''));
+    });
+  }
+
+  // Número de conversas não lidas no item "Mensagens" da navegação.
+  function marcarNaoLidas(conta) {
+    if (!conta || !conta.perfil) return;
+    minhasConversas(conta).then(function (lista) {
+      var n = lista.filter(function (cv) { return naoLida(cv, ladoDe(conta)); }).length;
+      var a = document.querySelector('#nav a[data-nav="mensagens"]');
+      if (!a || !n) return;
+      a.insertAdjacentHTML('beforeend', '<span class="nav-badge" aria-hidden="true">' + n + '</span>');
+      a.setAttribute('aria-label', 'Mensagens, ' + n + (n === 1 ? ' não lida' : ' não lidas'));
+    }).catch(function () { /* o número é só uma ajuda */ });
+  }
+
+  /* ---------- Lista de conversas ---------- */
+
+  function renderMensagens() {
+    topo('Mensagens', 'inicio.html');
+    var conta, lado, lista = [], ultimas = {}, filtro = params.get('filtro') === 'sem-resposta' ? 'sem-resposta' : 'todas';
+    contaDoTipo().then(function (c) {
+      if (!c) return;
+      conta = c; lado = ladoDe(c);
+      navBeta(conta.perfil.tipo, 'mensagens');
+      return carregar();
+    }).catch(function (err) { erroCarregar(err); });
+
+    function carregar() {
+      return minhasConversas(conta).then(function (l) {
+        lista = l.filter(function (cv) { return cv.ultima_mensagem_em; });
+        if (!lista.length) return { data: [] };
+        return sb.from('mensagens').select('conversa_id, de, texto, criado_em').in('conversa_id', lista.map(function (cv) { return cv.id; }))
+          .order('criado_em', { ascending: false }).limit(1000);
+      }).then(function (r) {
+        if (r.error) throw r.error;
+        ultimas = {};
+        (r.data || []).forEach(function (m) { if (!ultimas[m.conversa_id]) ultimas[m.conversa_id] = m; });
+        pintar();
+      });
+    }
+
+    var rapidas = function () {
+      return lado === 'empresa'
+        ? ['Podemos conversar amanhã?', 'Já te explico os detalhes.', 'Voltamos com uma resposta até sexta.']
+        : ['Obrigado pelo retorno!', 'Tenho disponibilidade esta semana.', 'Pode me passar mais detalhes?'];
+    };
+
+    function pintar() {
+      var pendentes = lista.filter(function (cv) { return semResposta(cv, lado); })
+        .sort(function (a, b) { return new Date(a.ultima_mensagem_em) - new Date(b.ultima_mensagem_em); });
+      var html = '';
+      if (lista.length) {
+        html += '<div class="filter" role="group" aria-label="Filtrar conversas" id="msg-filter">' +
+          '<button type="button" data-filtro="todas" aria-pressed="' + (filtro === 'todas') + '">Todas · ' + lista.length + '</button>' +
+          '<button type="button" data-filtro="sem-resposta" aria-pressed="' + (filtro === 'sem-resposta') + '">Sem resposta · ' + pendentes.length + '</button></div>';
+      }
+      if (!lista.length) {
+        html += vazio('Nenhuma conversa ainda', lado === 'empresa'
+          ? 'Chame um candidato para conversa na lista de candidatos de uma vaga.'
+          : 'Quando uma empresa chamar você, ou quando você tirar uma dúvida numa vaga, a conversa aparece aqui.',
+          lado === 'empresa' ? '<a href="candidatos.html" class="btn btn-primary">Ver candidatos</a>' : '<a href="buscar.html" class="btn btn-primary">Buscar vagas</a>');
+      } else if (filtro === 'sem-resposta') {
+        html += pendentes.length ? '<p class="row-sub sr-intro">Quem escreveu por último foi ' + (lado === 'empresa' ? 'o profissional' : 'a empresa') +
+          '. Responder rápido conta na sua reputação de resposta. As mais antigas aparecem primeiro.</p>' + pendentes.map(function (cv) {
+            var m = ultimas[cv.id] || {};
+            return '<div class="card sr-card" data-conv="' + cv.id + '"><div class="media"><span class="avatar ' + (lado === 'empresa' ? 'blue' : 'avatar-empresa') + '">' + esc(iniciais(nomeDoOutro(cv, lado))) + '</span>' +
+                '<div class="row-main"><div class="row-title">' + esc(nomeDoOutro(cv, lado)) + '</div>' +
+                (cv.vagas ? '<span class="chat-vaga-lbl">' + esc(cv.vagas.titulo) + '</span>' : '') +
+                '<span class="chip amber sr-espera">' + icon('clock', 12, { stroke: 2.4 }) + esc(esperandoHa(cv.ultima_mensagem_em)) + '</span></div></div>' +
+              '<blockquote class="sr-msg">' + esc(m.texto || '') + '</blockquote>' +
+              '<div class="sr-rapidas" role="group" aria-label="Respostas rápidas">' + rapidas().map(function (t) {
+                return '<button type="button" class="sr-rapida" data-rapida="' + esc(t) + '">' + esc(t) + '</button>';
+              }).join('') + '</div>' +
+              '<form class="sr-form" data-conv="' + cv.id + '"><label class="visually-hidden" for="sr-in-' + cv.id + '">Resposta para ' + esc(nomeDoOutro(cv, lado)) + '</label>' +
+                '<textarea id="sr-in-' + cv.id + '" rows="2" maxlength="2000" placeholder="Escreva sua resposta…"></textarea>' +
+                '<div class="btn-row"><button type="submit" class="btn btn-primary">' + icon('send', 16, { stroke: 2.2 }) + 'Responder</button>' +
+                '<a class="btn btn-outline" href="conversa.html?id=' + encodeURIComponent(cv.id) + '">Abrir conversa</a></div></form></div>';
+          }).join('')
+          : '<div class="empty" id="sr-vazio"><p class="row-title">Tudo respondido.</p><p class="row-sub">Ninguém está esperando sua resposta.</p>' +
+            '<button type="button" class="btn btn-outline" data-filtro="todas">Ver todas as conversas</button></div>';
+      } else {
+        html += '<div class="list chat-list">' + lista.map(function (cv) {
+          var m = ultimas[cv.id] || {}, nl = naoLida(cv, lado);
+          var liberado = cv.compartilhou_empresa && cv.compartilhou_profissional;
+          return '<a class="chat-row' + (nl ? ' chat-unread' : '') + '" href="conversa.html?id=' + encodeURIComponent(cv.id) + '">' +
+            '<span class="avatar ' + (lado === 'empresa' ? 'blue' : 'avatar-empresa') + '">' + esc(iniciais(nomeDoOutro(cv, lado))) + '</span>' +
+            '<span class="row-main"><span class="chat-row-top"><span class="row-title">' + esc(nomeDoOutro(cv, lado)) + '</span>' +
+              '<span class="chat-time">' + horaCurta(cv.ultima_mensagem_em) + '</span></span>' +
+              (cv.vagas ? '<span class="chat-vaga-lbl">' + esc(cv.vagas.titulo) + '</span>' : '') +
+              '<span class="row-sub chat-preview">' + esc((m.de === lado ? 'Você: ' : '') + (m.texto || '')) + '</span>' +
+              (liberado ? '<span class="chip green chat-wa-badge">' + icon('check', 12, { stroke: 2.6 }) + 'Contato liberado</span>' : '') +
+              (!nl && semResposta(cv, lado) ? '<span class="chip amber chat-wa-badge">Aguardando sua resposta</span>' : '') + '</span>' +
+            (nl ? '<span class="chat-dot" aria-hidden="true"></span><span class="visually-hidden">, não lida</span>' : '') + '</a>';
+        }).join('') + '</div>';
+      }
+      html += '<p class="form-status" id="form-status" role="alert"></p>';
+      $('#content').innerHTML = html;
+    }
+
+    $('#content').addEventListener('click', function (e) {
+      var f = e.target.closest('[data-filtro]');
+      if (f) {
+        filtro = f.getAttribute('data-filtro');
+        history.replaceState(null, '', 'mensagens.html' + (filtro === 'sem-resposta' ? '?filtro=sem-resposta' : ''));
+        pintar();
+        return;
+      }
+      var r = e.target.closest('[data-rapida]');
+      if (r) { var ta = r.closest('.sr-card').querySelector('textarea'); ta.value = r.getAttribute('data-rapida'); ta.focus(); }
+    });
+    $('#content').addEventListener('submit', function (e) {
+      var form = e.target.closest('.sr-form');
+      if (!form) return;
+      e.preventDefault();
+      var ta = form.querySelector('textarea'), texto = ta.value.trim();
+      if (!texto) { ta.focus(); toast('Escreva a resposta ou escolha uma resposta rápida.'); return; }
+      var btn = form.querySelector('button[type=submit]');
+      ocupado(btn, true, 'Enviando…');
+      var cv = lista.filter(function (x) { return x.id === form.getAttribute('data-conv'); })[0];
+      sb.from('mensagens').insert({ conversa_id: cv.id, de: lado, texto: texto }).then(function (res) {
+        if (res.error) { ocupado(btn, false); status(erroComDetalhe(res.error)); return; }
+        toast('Resposta enviada para ' + nomeDoOutro(cv, lado) + '.');
+        carregar();
+      });
+    });
+  }
+
+  /* ---------- Conversa ---------- */
+
+  function renderConversa() {
+    var id = params.get('id');
+    topo('Conversa', 'mensagens.html');
+    var conta, lado, cv, msgs = [], canal = null, timer = null;
+
+    contaDoTipo().then(function (c) {
+      if (!c) return;
+      conta = c; lado = ladoDe(c);
+      navBeta(conta.perfil.tipo, 'mensagens');
+      return Promise.all([
+        sb.from('conversas').select(SELECT_CONVERSA).eq('id', id).maybeSingle(),
+        sb.from('mensagens').select('*').eq('conversa_id', id).order('criado_em', { ascending: true })
+      ]).then(function (rs) {
+        if (rs[0].error) throw rs[0].error;
+        cv = rs[0].data; msgs = rs[1].data || [];
+        if (!cv) { $('#content').innerHTML = vazio('Conversa não encontrada', 'Ela pode ter sido apagada.', '<a href="mensagens.html" class="btn btn-primary">Mensagens</a>'); return; }
+        topo(nomeDoOutro(cv, lado), 'mensagens.html');
+        montar();
+        marcarLida();
+        ouvir();
+      });
+    }).catch(function (err) { erroCarregar(err, 'mensagens.html'); });
+
+    function marcarLida() {
+      var patch = {}; patch['lido_' + lado + '_em'] = new Date().toISOString();
+      sb.from('conversas').update(patch).eq('id', cv.id).then(function () { /* silencioso */ });
+    }
+
+    function estadoContato() {
+      var eu = cv['compartilhou_' + lado], outro = cv['compartilhou_' + outroLado(lado)];
+      return eu && outro ? 'liberado' : (eu ? 'aguardando' : (outro ? 'pedido' : 'nenhum'));
+    }
+
+    function barraContato() {
+      var est = estadoContato(), nome = nomeDoOutro(cv, lado).split(' ')[0];
+      if (est === 'nenhum') return '<div class="wa-bar"><span class="wa-msg">Contato direto ainda não liberado</span>' +
+        '<button type="button" class="btn btn-outline" data-contato="compartilhar">Compartilhar meu contato</button></div>';
+      if (est === 'aguardando') return '<div class="wa-bar"><span class="wa-msg">Você compartilhou seu contato. Aguardando ' + esc(nome) + '.</span></div>';
+      if (est === 'pedido') return '<div class="wa-bar"><span class="wa-msg">' + esc(nome) + ' quer trocar contato. Compartilhar o seu?</span>' +
+        '<button type="button" class="btn btn-primary" data-contato="compartilhar">Compartilhar o meu contato</button></div>';
+      return '<div class="wa-bar wa-liberado"><span class="wa-msg">' + icon('check', 16, { stroke: 2.4 }) + 'Contato liberado</span>' +
+        '<button type="button" class="btn btn-primary" data-contato="ver">Ver contato</button></div>';
+    }
+
+    function bolhas() {
+      if (!msgs.length) return '<li class="bubble-sys">Nenhuma mensagem ainda. Escreva para começar a conversa.</li>';
+      return msgs.map(function (m) {
+        return '<li class="bubble ' + (m.de === lado ? 'bubble-out' : 'bubble-in') + '"><span class="bubble-text">' + esc(m.texto) + '</span>' +
+          '<span class="bubble-time">' + horaCurta(m.criado_em) + '</span></li>';
+      }).join('');
+    }
+
+    function vagaLink() {
+      if (!cv.vagas) return '';
+      var href = lado === 'empresa' ? 'candidatos.html?vaga=' + encodeURIComponent(cv.vagas.id) : 'vaga.html?id=' + encodeURIComponent(cv.vagas.id);
+      return '<div class="chat-vaga">' + icon('briefcase', 16, { stroke: 2 }) + '<a href="' + href + '">' + esc(cv.vagas.titulo) + '</a>' +
+        (lado === 'empresa' && cv.profissionais ? ' · <a href="ver-profissional.html?id=' + encodeURIComponent(cv.profissional_id) + '&vaga=' + encodeURIComponent(cv.vagas.id) + '">Ver perfil</a>' : '') + '</div>';
+    }
+
+    function montar() {
+      $('#content').innerHTML = vagaLink() +
+        '<div id="wa-area">' + barraContato() + '</div>' +
+        '<ul class="bubbles" id="msgs" aria-live="polite">' + bolhas() + '</ul>' +
+        '<form id="msg-form" class="chat-compose"><label class="visually-hidden" for="msg-in">Mensagem</label>' +
+          '<textarea id="msg-in" rows="1" maxlength="2000" placeholder="Escreva uma mensagem…"></textarea>' +
+          '<button type="submit" class="btn btn-primary chat-send" aria-label="Enviar">' + icon('send', 18, { stroke: 2.2 }) + '</button></form>' +
+        '<p class="row-sub chat-aviso">Para sua segurança, combine tudo por aqui até os dois liberarem o contato. Nunca pague para conseguir uma vaga.</p>' +
+        '<div id="den-area"><div class="btn-row den-row"><button type="button" class="btn btn-outline btn-quiet" data-den="abrir">Denunciar conversa</button></div></div>' +
+        '<p class="form-status" id="form-status" role="alert"></p>';
+      if (params.get('texto') && !msgs.length) $('#msg-in').value = params.get('texto');
+      rolar();
+      ligar();
+    }
+
+    function rolar() { var el = $('#msgs'); if (el) el.scrollTop = el.scrollHeight; }
+    function repintarMsgs() { $('#msgs').innerHTML = bolhas(); rolar(); }
+
+    function novas() {
+      var ultima = msgs.length ? msgs[msgs.length - 1].criado_em : '1970-01-01T00:00:00Z';
+      return Promise.all([
+        sb.from('mensagens').select('*').eq('conversa_id', cv.id).gt('criado_em', ultima).order('criado_em', { ascending: true }),
+        sb.from('conversas').select('compartilhou_empresa, compartilhou_profissional').eq('id', cv.id).maybeSingle()
+      ]).then(function (rs) {
+        var chegou = (rs[0].data || []).filter(function (m) { return !msgs.some(function (x) { return x.id === m.id; }); });
+        if (chegou.length) { msgs = msgs.concat(chegou); repintarMsgs(); marcarLida(); }
+        if (rs[1].data && (rs[1].data.compartilhou_empresa !== cv.compartilhou_empresa || rs[1].data.compartilhou_profissional !== cv.compartilhou_profissional)) {
+          cv.compartilhou_empresa = rs[1].data.compartilhou_empresa; cv.compartilhou_profissional = rs[1].data.compartilhou_profissional;
+          $('#wa-area').innerHTML = barraContato();
+        }
+      });
+    }
+
+    // Tempo real pelo Supabase Realtime; enquanto não conecta (ou se cair), confere a cada poucos segundos.
+    function ouvir() {
+      var intervalo = 5000;
+      try {
+        canal = sb.channel('conversa-' + cv.id)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensagens', filter: 'conversa_id=eq.' + cv.id }, function () { novas(); })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversas', filter: 'id=eq.' + cv.id }, function () { novas(); })
+          .subscribe(function (st) { intervalo = st === 'SUBSCRIBED' ? 20000 : 5000; });
+      } catch (e) { /* segue com a conferência periódica */ }
+      (function ciclo() { timer = setTimeout(function () { novas().then(ciclo, ciclo); }, intervalo); })();
+      window.addEventListener('pagehide', function () { clearTimeout(timer); if (canal) sb.removeChannel(canal); });
+    }
+
+    function ligar() {
+      $('#msg-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var input = $('#msg-in'), texto = input.value.trim();
+        if (!texto) return;
+        var btn = $('#msg-form button');
+        ocupado(btn, true, '…');
+        sb.from('mensagens').insert({ conversa_id: cv.id, de: lado, texto: texto }).select().maybeSingle().then(function (r) {
+          ocupado(btn, false);
+          btn.innerHTML = icon('send', 18, { stroke: 2.2 });
+          if (r.error) { status(erroComDetalhe(r.error)); return; }
+          input.value = '';
+          if (!msgs.some(function (x) { return x.id === r.data.id; })) msgs.push(r.data);
+          repintarMsgs();
+          input.focus();
+        });
+      });
+      $('#msg-in').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#msg-form').requestSubmit(); }
+      });
+
+      $('#wa-area').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-contato]');
+        if (!b) return;
+        if (b.getAttribute('data-contato') === 'compartilhar') {
+          ocupado(b, true, 'Compartilhando…');
+          var patch = {}; patch['compartilhou_' + lado] = true;
+          sb.from('conversas').update(patch).eq('id', cv.id).then(function (r) {
+            if (r.error) { ocupado(b, false); status(erroComDetalhe(r.error)); return; }
+            cv['compartilhou_' + lado] = true;
+            $('#wa-area').innerHTML = barraContato();
+            toast(estadoContato() === 'liberado' ? 'Contato liberado para os dois.' : 'Contato compartilhado. Ele aparece para a outra pessoa quando ela compartilhar o dela.');
+          });
+          return;
+        }
+        if (b.getAttribute('data-contato') === 'fechar') { var p = $('#wa-area .wa-preview'); if (p) p.remove(); return; }
+        if ($('#wa-area .wa-preview')) { $('#wa-area .wa-preview').remove(); return; }
+        ocupado(b, true, 'Carregando…');
+        sb.rpc('contato_da_conversa', { p_conversa: cv.id }).then(function (r) {
+          ocupado(b, false);
+          if (r.error) { status(erroComDetalhe(r.error)); return; }
+          var ct = (r.data || [])[0] || {};
+          var tel = (ct.telefone || '').replace(/[^\d+]/g, '');
+          var nome = nomeDoOutro(cv, lado);
+          var msg = 'Olá! Aqui é ' + conta.dados.nome + ', pelo KORbuild Match' + (cv.vagas ? ', sobre a vaga de ' + cv.vagas.titulo : '') + '.';
+          var acoes = [];
+          if (tel && ct.canal !== 'email') {
+            if (ct.canal === 'sms') acoes.push('<a class="btn btn-primary" href="sms:' + esc(tel) + '?body=' + encodeURIComponent(msg) + '">Enviar SMS</a>');
+            else acoes.push('<a class="btn btn-primary" target="_blank" rel="noopener" href="https://wa.me/' + esc(tel.replace('+', '')) + '?text=' + encodeURIComponent(msg) + '">Abrir WhatsApp</a>');
+          }
+          if (ct.email) acoes.push('<a class="btn btn-outline" href="mailto:' + esc(ct.email) + '?subject=' + encodeURIComponent('KORbuild Match' + (cv.vagas ? ' · ' + cv.vagas.titulo : '')) + '">Enviar e-mail</a>');
+          $('#wa-area').insertAdjacentHTML('beforeend', '<div class="wa-preview" id="contato-liberado"><p class="wa-preview-lbl">Contato de ' + esc(nome) + '</p>' +
+            '<dl class="summary">' + (ct.telefone ? '<div><dt>Telefone</dt><dd>' + esc(ct.telefone) + '</dd></div>' : '') +
+              (ct.email ? '<div><dt>E-mail</dt><dd>' + esc(ct.email) + '</dd></div>' : '') +
+              '<div><dt>Prefere</dt><dd>' + esc(rotuloDe(D.canais, ct.canal) || 'WhatsApp') + '</dd></div></dl>' +
+            (!ct.telefone && !ct.email ? '<p class="row-sub">' + esc(nome) + ' ainda não cadastrou um contato. Continue a conversa por aqui.</p>' : '') +
+            '<div class="btn-row">' + acoes.join('') + '<button type="button" class="btn btn-outline btn-quiet" data-contato="fechar">Fechar</button></div></div>');
+        });
+      });
+
+      $('#den-area').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-den]');
+        if (!b) return;
+        var acao = b.getAttribute('data-den');
+        if (acao === 'abrir') {
+          $('#den-area').innerHTML = '<div class="card card-warn" id="den-form">' + group('den-motivo', 'Por que denunciar esta conversa?',
+            pills('den-motivo', [{ id: 'Spam', rotulo: 'Spam' }, { id: 'Golpe ou fraude', rotulo: 'Golpe ou fraude' }, { id: 'Ofensa', rotulo: 'Ofensa' }, { id: 'Outro', rotulo: 'Outro' }]), { req: true }) +
+            '<div class="btn-row"><button type="button" class="btn btn-primary" data-den="enviar">Enviar denúncia</button>' +
+            '<button type="button" class="btn btn-outline" data-den="cancelar">Cancelar</button></div></div>';
+          return;
+        }
+        if (acao === 'cancelar') { $('#den-area').innerHTML = '<div class="btn-row den-row"><button type="button" class="btn btn-outline btn-quiet" data-den="abrir">Denunciar conversa</button></div>'; return; }
+        var motivo = marcados('den-motivo')[0];
+        if (!check([{ id: 'den-motivo', ok: !!motivo, msg: 'Escolha o motivo da denúncia.' }])) return;
+        ocupado(b, true, 'Enviando…');
+        sb.from('denuncias').insert({ alvo_tipo: 'conversa', alvo_id: cv.id, motivo: motivo }).then(function (r) {
+          if (r.error) { ocupado(b, false); status(erroComDetalhe(r.error)); return; }
+          $('#den-area').innerHTML = '<p class="row-sub den-ok" id="den-ok">' + icon('eye', 14, { stroke: 2 }) + ' Denúncia enviada. A moderação vai analisar a conversa.</p>';
+        });
+      });
+    }
+  }
+
   var PAGES = {
     entrar: renderEntrar,
     cadastro: renderCadastro,
@@ -1934,7 +2343,9 @@
     'ver-profissional': renderVerProfissional,
     buscar: renderBuscar,
     vaga: renderVaga,
-    candidaturas: renderCandidaturas
+    candidaturas: renderCandidaturas,
+    mensagens: renderMensagens,
+    conversa: renderConversa
   };
 
   var page = document.body.dataset.page;

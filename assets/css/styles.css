@@ -1614,3 +1614,12 @@ body[data-page="demo"] .app {
 .triagem-item { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--neutral-tint); }
 .vaga-item .chips, .cand-card .chips { margin-top: 2px; }
 #nova-vaga { align-self: flex-start; }
+/* Mensagens (versão real) */
+.bottom-nav a { position: relative; }
+.nav-badge {
+  position: absolute; top: 2px; left: calc(50% + 6px);
+  min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 9px; background: var(--blue); color: #FFFFFF;
+  font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+.chat-aviso { font-size: 12px; margin: 0; }
