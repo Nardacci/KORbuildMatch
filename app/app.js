@@ -167,7 +167,17 @@
     if (code === 'signup_disabled') return 'O cadastro está fechado no momento.';
     if (/failed to fetch|network|load failed/.test(msg)) return 'Sem conexão com o servidor. Confira sua internet e tente de novo.';
     if (code === '23514' || /violates check constraint/.test(msg)) return 'Algum campo está num formato que não aceitamos. Confira os dados.';
+    if (code === 'email_address_not_authorized' || /not authorized/.test(msg)) return 'O envio de e-mails do sistema ainda está em modo de teste e só aceita endereços da equipe. Avise o suporte do KORbuild Match.';
+    if (/error sending .*email|sending email/.test(msg)) return 'Não conseguimos enviar o e-mail de confirmação agora. Tente de novo em alguns minutos.';
+    if (/database error saving new user/.test(msg)) return 'Não conseguimos criar a conta agora. Tente de novo em instantes.';
     return 'Não deu certo agora. Tente de novo em instantes.';
+  }
+
+  // Mensagem para a pessoa + código técnico discreto (ajuda o suporte a achar a causa).
+  function erroComDetalhe(err) {
+    if (window.console) console.error('[KORbuild] erro do Supabase', err);
+    var det = [err && (err.code || err.error_code), err && err.status, err && err.message].filter(Boolean).join(' · ');
+    return traduzErro(err) + (det ? ' (Detalhe: ' + det + ')' : '');
   }
 
   /* ---------- País e cidade ---------- */
@@ -495,7 +505,7 @@
               ocupado(b, true, 'Enviando…');
               reenviarConfirmacao(email).then(function (err) {
                 ocupado(b, false);
-                status(err ? traduzErro(err) : 'Enviamos um novo link para ' + email + '.');
+                status(err ? erroComDetalhe(err) : 'Enviamos um novo link para ' + email + '.');
               });
             });
           }
@@ -597,7 +607,7 @@
         sb.auth.signUp({ email: email, password: $('#cad-senha').value, options: { data: meta, emailRedirectTo: urlDe('inicio.html') } })
           .then(function (r) {
             ocupado(btn, false);
-            if (r.error) { status(traduzErro(r.error)); return; }
+            if (r.error) { status(erroComDetalhe(r.error)); return; }
             if (r.data.session) { ir('inicio.html'); return; }  // projeto sem confirmação de e-mail
             confirmarEmail(nome, email);
           });
@@ -636,7 +646,7 @@
         var b = this;
         b.setAttribute('aria-disabled', 'true');
         reenviarConfirmacao(email).then(function (err) {
-          $('#email-status').textContent = err ? traduzErro(err) : 'Enviamos um novo link para ' + email + '.';
+          $('#email-status').textContent = err ? erroComDetalhe(err) : 'Enviamos um novo link para ' + email + '.';
           contagem(60);
         });
       });
@@ -673,7 +683,7 @@
       ocupado(btn, true, 'Enviando…');
       sb.auth.resetPasswordForEmail(email, { redirectTo: urlDe('nova-senha.html') }).then(function (r) {
         ocupado(btn, false);
-        if (r.error && !/not found/i.test(r.error.message || '')) { status(traduzErro(r.error)); return; }
+        if (r.error && !/not found/i.test(r.error.message || '')) { status(erroComDetalhe(r.error)); return; }
         // Mesma resposta exista ou não a conta (não revela quem está cadastrado).
         $('#rec-form').innerHTML =
           '<div class="icon-tile lg blue">' + icon('mail', 30, { stroke: 2 }) + '</div>' +

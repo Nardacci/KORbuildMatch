@@ -131,3 +131,14 @@ depois:
 - **Faixas de reputação**: hoje a média é simples e "em construção" vale abaixo de 3 avaliações. Ainda não entram a média bayesiana nem o peso da recência (seção 8.6).
 - **Avaliação em vínculo longo**: hoje só ao fim do vínculo. Faltam os marcos periódicos (seção 8.2).
 - **Vaga e destaque avulsos**: as tabelas estão prontas, mas os preços ainda estão pendentes (seção 16).
+
+## Problemas comuns no cadastro
+
+A tela de cadastro mostra a explicação e, entre parênteses, o código técnico do erro.
+
+| O que aparece | Causa | Como resolver |
+| --- | --- | --- |
+| "…modo de teste e só aceita endereços da equipe" (`email_address_not_authorized`) | Sem SMTP próprio, o Supabase só envia e-mail para membros da organização do projeto | Configure um SMTP em **Authentication → Emails → SMTP Settings** (ex.: o mesmo provedor usado no KORbuild Finances) |
+| "Não conseguimos enviar o e-mail de confirmação" (`Error sending confirmation email`) | Falha no envio: SMTP com dados errados, remetente não verificado ou erro no modelo do e-mail | Confira o SMTP e o modelo em **Emails → Templates**; veja o motivo em **Logs → Auth** |
+| "Muitas tentativas em pouco tempo" (`over_email_send_rate_limit`) | Limite de e-mails por hora (o envio padrão permite poucos) | Espere, ou configure SMTP próprio e aumente o limite em **Authentication → Rate Limits** |
+| "Não conseguimos criar a conta agora" (`Database error saving new user`) | Erro no gatilho que cria o perfil no banco | Veja o motivo em **Logs → Postgres** e me envie a mensagem |
