@@ -1623,3 +1623,15 @@ body[data-page="demo"] .app {
   font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
 }
 .chat-aviso { font-size: 12px; margin: 0; }
+/* Contratação e reputação (versão real) */
+.estrelas { display: inline-flex; gap: 1px; color: var(--line-strong); flex-shrink: 0; }
+.estrela.on { color: var(--amber); }
+.estrela.on svg { fill: currentColor; }
+.av-respostas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.av-respostas li { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted); }
+.av-respostas .chip { flex-shrink: 0; }
+.av-resposta { padding: 10px 12px; border-left: 3px solid var(--line-strong); background: var(--ground); border-radius: 0 10px 10px 0; }
+.av-responder { display: flex; flex-direction: column; gap: 8px; }
+.av-responder textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font: inherit; font-size: 14px; }
+.av-ref { margin: -2px 0 2px; font-weight: 600; color: var(--blue); }
+.avaliacao .head-row { align-items: flex-start; }
