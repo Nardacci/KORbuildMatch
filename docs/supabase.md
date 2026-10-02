@@ -31,11 +31,11 @@ A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
 - **Cadastro**: envia `tipo`, `nome` e o que a pessoa digitou (país e setor, ou cidade e "o que você faz"). O banco cria o perfil; no primeiro acesso, o site completa o perfil com esses dados.
 - **Confirmação de e-mail**: o link do e-mail abre `app/inicio.html` já com a sessão. Se o link vencer, a pessoa entra com e-mail e senha ou pede outro link.
 - **Recuperar senha**: o link abre `app/nova-senha.html`. A resposta é a mesma exista ou não a conta, para não revelar quem está cadastrado.
-- **Início**: mostra o que falta no perfil (progresso) e leva para editar.
+- **Início**: enquanto o perfil está incompleto, mostra o que falta (progresso) e leva para editar. Com o perfil completo, vira a página principal do protótipo: busca, "Vagas para você" (profissional) ou "Publique sua primeira vaga" (empresa) e o resumo do perfil. Vagas, busca e candidaturas ganham dados reais na etapa 3.
 - **Perfil**: empresa (setor, porte, sede, site, sobre) ou profissional (o que faz, cidade, disponibilidade, distância, modelos, competências, aparecer nas buscas), mais o contato e a troca de senha.
 - **País e cidade**: primeiro o país (todos os países, com Brasil, Estados Unidos e Portugal no topo; o padrão vem do idioma do navegador), depois a cidade com busca: digitando "laco" aparece "Laconia, NH". Aceita nome sem acento e "cidade, estado". São cerca de 170 mil cidades (mais de 1.000 habitantes ou sedes de município); quem mora numa cidade menor escolhe a mais próxima. O banco guarda o código do país (BR, US…), a cidade, o estado (sigla quando existe) e o ponto aproximado. Nos EUA, as distâncias aparecem em milhas.
 
-Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num navegador contra um Supabase simulado (57 verificações).
+Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num navegador contra um Supabase simulado (63 verificações).
 
 ### Modelos de e-mail em português
 

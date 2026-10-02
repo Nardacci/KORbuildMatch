@@ -177,8 +177,13 @@ function rest(method, path, q, body, h) {
   L(pj.cidade === 'Campinas' && pj.estado === 'SP' && pj.pais === 'BR' && pj.lat === -22.906, 'perfil: cidade nova salva: ' + [pj.cidade, pj.estado, pj.pais, pj.lat]);
   L(pj.disponibilidade === 'Disponível imediatamente' && pj.distancia_max_km === 15 && pj.modelos.join() === 'presencial,remoto' && pj.competencias.join() === 'Atendimento,Agenda,Pacote Office', 'perfil: salva no banco: ' + JSON.stringify(pj));
   L(db.contatos[joao.id].telefone === '+55 11 91234-5678' && db.contatos[joao.id].canal === 'whatsapp', 'perfil: salva contato');
-  await pg.waitForSelector('#pct');
-  L(/100%/.test(await t('#pct')), 'início: 100% ' + await t('#pct'));
+  await pg.waitForSelector('#ola');
+  L(!(await pg.$('#completar')) && !!(await pg.$('#sem-vagas')) && !!(await pg.$('.search-c')), 'início: perfil completo vira a página principal (busca e vagas)');
+  L(/perfil está completo/.test(await t('.hero-c')) && /vagas perto de você/.test(await t('.hero-stats')), 'início: topo da página principal');
+  L(/Campinas, SP/.test(await t('#sem-vagas')) && /Recepcionista/.test(await t('#editar-perfil')) && /3 competências/.test(await t('#editar-perfil')), 'início: vagas vazias com a cidade e resumo do perfil: ' + await t('#editar-perfil'));
+  await pg.click('#busca');
+  L(/próxima etapa/.test(await t('#toast')), 'início: busca avisa a próxima etapa');
+  L(!(await hs()) && await btnsOk(), 'início completo: layout');
   // 6. Sair
   await pg.goto(B + 'perfil.html'); await pg.waitForSelector('#sair');
   await pg.click('#sair'); await pg.waitForURL(/entrar\.html\?saiu=1/);
@@ -229,8 +234,8 @@ function rest(method, path, q, body, h) {
   await pg.click('#p-cidade-lista [role=option] >> nth=0');
   await pg.fill('#p-descricao', 'Padaria de bairro com 3 lojas em Campinas, pães artesanais desde 1998.');
   await pg.check('input[name=p-canal][value=email]');
-  await pg.click('#salvar'); await pg.waitForURL(/inicio\.html/); await pg.waitForSelector('#pct');
-  L(e.cidade === 'Campinas' && e.estado === 'SP' && e.porte === '10 a 49 pessoas' && /100%/.test(await t('#pct')), 'empresa: perfil completo ' + JSON.stringify(e));
+  await pg.click('#salvar'); await pg.waitForURL(/inicio\.html/); await pg.waitForSelector('#ola');
+  L(e.cidade === 'Campinas' && e.estado === 'SP' && e.porte === '10 a 49 pessoas' && !!(await pg.$('#primeira-vaga')) && /Buscar profissionais/.test(await t('#busca')), 'empresa: perfil completo vira a página principal ' + JSON.stringify(e));
   L(!Object.values(db.profissionais).some(p => p.nome === 'Hackeado'), 'rls simulado ok');
   // 10. Cadastro repetido
   await pg.goto(B + 'perfil.html'); await pg.waitForSelector('#sair'); await pg.click('#sair'); await pg.waitForURL(/saiu=1/);

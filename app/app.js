@@ -424,7 +424,7 @@
     var empresa = conta.perfil.tipo === 'empresa';
     $('#topbar').innerHTML = '<div class="brand-mark">' + icon('logo', 20, { stroke: 2.2 }) + '</div>' +
       '<div class="brand-name" style="flex-grow:1">KORbuild <span>Match</span></div>' +
-      '<a href="perfil.html" class="avatar ' + (empresa ? 'avatar-empresa' : 'blue') + '" aria-label="' + (empresa ? 'Minha empresa' : 'Meu perfil') + '">' +
+      '<a href="perfil.html" class="avatar' + (empresa ? '' : ' blue') + '" aria-label="' + (empresa ? 'Minha empresa' : 'Meu perfil') + '">' +
         esc(iniciais(conta.dados && conta.dados.nome)) + '</a>';
   }
 
@@ -783,36 +783,67 @@
         var primeiro = empresa ? d.nome : (d.nome || '').split(' ')[0];
         var pais = codigoPais(d.pais);
         var dist = d.distancia_max_km || 25;
+        var completo = pct === 100;
+        var distTxt = usaMilhas(pais) ? Math.round(dist * 0.621371) + ' mi' : dist + ' km';
         var stats = empresa
-          ? [{ v: pct + '%', r: 'perfil completo', id: 'pct' }, { v: '0', r: 'vagas abertas' }, { v: '3 meses', r: 'grátis na 1ª vaga' }]
-          : [{ v: pct + '%', r: 'perfil completo', id: 'pct' }, { v: String((d.competencias || []).length), r: 'competências' },
-            { v: usaMilhas(pais) ? Math.round(dist * 0.621371) + ' mi' : dist + ' km', r: 'distância máxima' }];
+          ? (completo ? [{ v: '0', r: 'vagas abertas' }, { v: '0', r: 'candidatos novos' }, { v: '3 meses', r: 'grátis na 1ª vaga' }]
+            : [{ v: pct + '%', r: 'perfil completo', id: 'pct' }, { v: '0', r: 'vagas abertas' }, { v: '3 meses', r: 'grátis na 1ª vaga' }])
+          : (completo ? [{ v: '0', r: 'vagas perto de você' }, { v: '0', r: 'candidaturas' }, { v: distTxt, r: 'distância máxima' }]
+            : [{ v: pct + '%', r: 'perfil completo', id: 'pct' }, { v: String((d.competencias || []).length), r: 'competências' }, { v: distTxt, r: 'distância máxima' }]);
+        var ondeTxt = d.cidade ? d.cidade + (d.estado ? ', ' + d.estado : '') : '';
 
-        $('#content').innerHTML =
+        var hero =
           '<section class="hero-c" aria-label="Resumo">' +
             '<div class="greeting"><h1 id="ola">Olá, ' + esc(primeiro) + '!</h1><p>' +
-              (pct === 100 ? 'Perfil completo. ' + (empresa ? 'Publicar vagas chega na próxima etapa da beta.' : 'As vagas chegam na próxima etapa da beta.')
+              (completo ? (empresa ? 'Tudo pronto para publicar a primeira vaga.' : 'Seu perfil está completo e visível para as empresas.')
                 : (empresa ? 'Complete o perfil da empresa para os profissionais conhecerem vocês.' : 'Complete seu perfil para aparecer nas indicações das empresas.')) + '</p></div>' +
             '<div class="hero-score"><b class="novo">Novo</b><div><strong>★ Reputação em construção</strong>' +
               '<span>' + (empresa ? 'Cada contratação confirmada conta aqui' : 'Cada trabalho confirmado conta aqui') + '</span></div></div>' +
             '<div class="hero-stats">' + stats.map(function (st) {
               return '<div class="hero-stat"><b' + (st.id ? ' id="' + st.id + '"' : '') + '>' + esc(st.v) + '</b><span>' + esc(st.r) + '</span></div>';
-            }).join('') + '</div></section>' +
+            }).join('') + '</div></section>';
 
-          '<section class="card sobre-hero" id="completar"><div class="head-row"><h2 class="card-title">' + (pct === 100 ? 'Seu perfil' : 'Complete seu perfil') + '</h2>' +
-              '<span class="chip ' + (pct === 100 ? 'green' : 'blue') + '">' + feitos + ' de ' + campos.length + '</span></div>' +
+        var checklist =
+          '<section class="card sobre-hero" id="completar"><div class="head-row"><h2 class="card-title">Complete seu perfil</h2>' +
+              '<span class="chip blue">' + feitos + ' de ' + campos.length + '</span></div>' +
             '<div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '" aria-label="Perfil completo"><span style="width:' + pct + '%"></span></div>' +
             '<ul class="todo-list">' + campos.map(function (c) {
               return '<li class="' + (c.ok ? 'ok' : '') + '">' + icon(c.ok ? 'check' : 'clock', 16, { stroke: 2.4 }) + '<span>' + esc(c.txt) + '</span></li>';
             }).join('') + '</ul>' +
-            '<a href="perfil.html" class="btn btn-primary" id="editar-perfil">' + (pct === 100 ? 'Ver e editar perfil' : 'Completar perfil') + '</a></section>' +
+            '<a href="perfil.html" class="btn btn-primary" id="editar-perfil">Completar perfil</a></section>';
 
+        function linha(href, ic, titulo, texto, id) {
+          return '<a href="' + href + '" class="row-link"' + (id ? ' id="' + id + '"' : '') + (href === '#' ? ' data-proxima' : '') + '>' +
+            '<div class="icon-tile">' + icon(ic) + '</div><div class="row-main"><div class="row-title">' + esc(titulo) + '</div>' +
+            '<div class="row-sub">' + esc(texto) + '</div></div><span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a>';
+        }
+
+        // Perfil completo: a página principal, como no protótipo. Vagas e candidaturas chegam na etapa 3.
+        var principal = empresa
+          ? '<a href="#" class="row-link search-c" id="busca" data-proxima><span>' + icon('search', 20, { stroke: 2 }) + '</span>Buscar profissionais ou cargos</a>' +
+            '<section class="section" aria-labelledby="h-atencao"><h2 id="h-atencao">Precisa da sua atenção</h2>' +
+              '<div class="card card-highlight" id="primeira-vaga"><div class="row-title">Publique sua primeira vaga</div>' +
+                '<p class="row-sub">Os 3 meses grátis do plano Essencial começam quando a primeira vaga for publicada. O cartão só é pedido no fim.</p>' +
+                '<a href="#" class="btn btn-primary" data-proxima>Publicar vaga</a></div></section>' +
+            '<section class="section" aria-labelledby="h-empresa"><h2 id="h-empresa">Sua empresa</h2>' +
+              linha('perfil.html', 'building', d.nome || 'Minha empresa', ['Perfil completo', d.setor, ondeTxt].filter(Boolean).join(' · '), 'editar-perfil') + '</section>'
+          : '<a href="#" class="row-link search-c" id="busca" data-proxima><span>' + icon('search', 20, { stroke: 2 }) + '</span>Buscar vagas, cargos ou empresas</a>' +
+            '<section class="section" aria-labelledby="h-vagas"><h2 id="h-vagas">Vagas para você</h2>' +
+              '<div class="empty" id="sem-vagas"><p class="row-title">Ainda não há vagas perto de você</p>' +
+                '<p class="row-sub">Assim que uma empresa publicar uma vaga que combina com seu perfil' + (ondeTxt ? ', perto de ' + esc(ondeTxt) : '') +
+                ', ela aparece aqui e você recebe um aviso.</p></div></section>' +
+            '<section class="section" aria-labelledby="h-perfil"><h2 id="h-perfil">Seu perfil</h2>' +
+              linha('perfil.html', 'user', d.resumo || 'Meu perfil', ['Perfil completo', ondeTxt, (d.competencias || []).length + ' competências'].filter(Boolean).join(' · '), 'editar-perfil') +
+              linha('#', 'clipboard', 'Minhas candidaturas', 'Nenhuma candidatura ainda') + '</section>';
+
+        var rodape = '<p class="row-sub" id="boas-vindas">' + icon('check', 14, { stroke: 2.6 }) + ' E-mail confirmado · ' + esc(conta.user.email) + '</p>';
+
+        $('#content').innerHTML = hero + (completo ? principal : checklist +
           '<section class="section" aria-labelledby="h-proximo"><h2 id="h-proximo">' + (empresa ? 'Vagas e candidatos' : 'Vagas para você') + '</h2>' +
-            '<div class="card"><p class="row-sub" id="boas-vindas">' + icon('check', 14, { stroke: 2.6 }) + ' E-mail confirmado · ' + esc(conta.user.email) + '</p>' +
-            '<p class="row-sub">' + (empresa
-              ? 'Publicar vagas, receber candidatos e buscar profissionais chegam na próxima etapa da versão beta. Os 3 meses grátis do Essencial só começam na primeira vaga publicada.'
-              : 'Buscar vagas e se candidatar chegam na próxima etapa da versão beta. Com o perfil completo, você aparece primeiro nas indicações.') + '</p>' +
-            '<a href="../demo.html" class="btn btn-outline">Ver a demonstração</a></div></section>';
+            '<div class="card"><p class="row-sub">' + (empresa
+              ? 'Com o perfil completo, você publica a primeira vaga. Os 3 meses grátis do Essencial só começam aí.'
+              : 'Com o perfil completo, você aparece primeiro nas indicações das empresas.') + '</p>' +
+            '<a href="../demo.html" class="btn btn-outline">Ver a demonstração</a></div></section>') + rodape;
       });
     }).catch(function (err) {
       $('#content').innerHTML = '<div class="card"><h2 class="card-title">Não foi possível carregar sua conta</h2><p class="row-sub">' + esc(traduzErro(err)) + '</p>' +
