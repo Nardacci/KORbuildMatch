@@ -325,6 +325,26 @@ reset role;
 select set_config('request.jwt.claim.sub', '', false);
 select public.confere('auditoria: contratação e avaliações registradas', $q$ select count(*) >= 7 from auditoria $q$);
 
+-- ----------------------------------------------------------------- NOTIFICAÇÕES (etapa 6)
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', false);
+set role authenticated;
+select public.confere('notificações: o profissional recebe os avisos dele (pedido de contratação, mensagem, avaliação)',
+  $q$ select count(*) filter (where categoria = 'contratacao') >= 1 and count(*) filter (where categoria = 'mensagens') >= 1 and count(*) filter (where categoria = 'avaliacoes') >= 1
+      and bool_and(user_id = auth.uid()) from notificacoes $q$);
+select public.teste('notificações: não cria aviso direto', $q$ insert into notificacoes (user_id, categoria, titulo) values (auth.uid(), 'mensagens', 'falso') $q$, true);
+select public.teste('notificações: marca como lida', $q$ update notificacoes set lida_em = now() where user_id = auth.uid() $q$);
+select public.teste('notificações: não altera o texto do aviso', $q$ update notificacoes set titulo = 'outro' where user_id = auth.uid() $q$, true);
+select public.teste('notificações: chama a função de aviso direto', $q$ select public.notificar(auth.uid(), 'mensagens', 'x', 'x', 'x') $q$, true);
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', false);
+set role authenticated;
+select public.confere('notificações: cada um só vê os seus', $q$ select bool_and(user_id = auth.uid()) and count(*) >= 1 from notificacoes $q$);
+reset role;
+select public.confere('notificações: avisos vão sempre para o outro lado (ninguém é avisado da própria mensagem)',
+  $q$ select not exists (select 1 from notificacoes n join mensagens m on n.link = 'conversa.html?id=' || m.conversa_id and n.user_id = m.autor
+                         where n.texto = left(m.texto, 200)) $q$);
+
 -- ----------------------------------------------------------------- RESUMO
 \set QUIET off
 select n, case when ok then 'PASS' else 'FAIL' end as r, descricao, detalhe from public.resultados_teste order by n;

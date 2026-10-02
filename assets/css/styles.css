@@ -1635,3 +1635,13 @@ body[data-page="demo"] .app {
 .av-responder textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font: inherit; font-size: 14px; }
 .av-ref { margin: -2px 0 2px; font-weight: 600; color: var(--blue); }
 .avaliacao .head-row { align-items: flex-start; }
+/* Avisos e plano (versão real) */
+.notif-nova { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
+.notif-quando { font-size: 12px; color: var(--muted-2); }
+.pref-linha { border: 0; margin: 0; padding: 12px 0; border-bottom: 1px solid var(--neutral-tint); display: flex; flex-direction: column; gap: 6px; }
+.pref-linha:last-of-type { border-bottom: 0; }
+.pref-linha legend { padding: 0; float: left; }
+.plano-preco { display: flex; align-items: baseline; gap: 6px; }
+.plano-preco b { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+.plano-preco span { color: var(--muted); font-size: 14px; }
+.topbar #sino { margin-left: auto; }

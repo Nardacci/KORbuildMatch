@@ -32,6 +32,7 @@
     clipboard: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/>',
     message: '<path d="M4 5h16v11H9l-5 4z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     send: '<path d="M4 12l16-8-6 16-3-6-7-2z"/>',
     star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>'
   };
@@ -431,8 +432,10 @@
     var empresa = conta.perfil.tipo === 'empresa';
     $('#topbar').innerHTML = '<div class="brand-mark">' + icon('logo', 20, { stroke: 2.2 }) + '</div>' +
       '<div class="brand-name" style="flex-grow:1">KORbuild <span>Match</span></div>' +
+      '<span id="sino-area"></span>' +
       '<a href="perfil.html" class="avatar' + (empresa ? '' : ' blue') + '" aria-label="' + (empresa ? 'Minha empresa' : 'Meu perfil') + '">' +
         esc(iniciais(conta.dados && conta.dados.nome)) + '</a>';
+    sino().then(function (html) { var a = $('#sino-area'); if (a) a.outerHTML = html; });
   }
 
   function topo(titulo, voltar) {
@@ -818,8 +821,9 @@
             });
 
         return dados.then(function (x) {
-          return Promise.all([minhasConversas(conta), minhasContratacoes(conta), carregarReputacao(empresa ? 'empresa' : 'profissional', empresa ? d.id : conta.user.id)])
-            .then(function (rs) { x.cvs = rs[0]; x.ks = rs[1].ks; x.avs = rs[1].avs; x.rep = rs[2].rep; return x; });
+          return Promise.all([minhasConversas(conta), minhasContratacoes(conta), carregarReputacao(empresa ? 'empresa' : 'profissional', empresa ? d.id : conta.user.id),
+            empresa ? sb.from('assinaturas').select('*').eq('empresa_id', d.id).maybeSingle() : Promise.resolve({ data: null })])
+            .then(function (rs) { x.cvs = rs[0]; x.ks = rs[1].ks; x.avs = rs[1].avs; x.rep = rs[2].rep; x.assinatura = rs[3].data; return x; });
         }).then(function (x) {
           var stats, principal, resumo;
           var lado = empresa ? 'empresa' : 'profissional';
@@ -837,12 +841,14 @@
             var novos = x.cands.filter(function (c) { return c.status === 'novo'; });
             var atrasados = novos.filter(function (c) { return diasDesde(c.criado_em) > D.prazoRespostaDias; });
             var publicouAlguma = x.vagas.some(function (v) { return v.publicada_em; });
-            stats = [{ v: String(abertas.length), r: 'vagas abertas' }, { v: String(novos.length), r: plural(novos.length, 'candidato novo', 'candidatos novos').replace(/^\d+ /, '') },
-              publicouAlguma ? { v: String(x.cands.length), r: 'candidaturas no total' } : { v: '3 meses', r: 'grátis na 1ª vaga' }];
+            stats = [{ v: String(abertas.length), r: abertas.length === 1 ? 'vaga aberta' : 'vagas abertas' }, { v: String(novos.length), r: plural(novos.length, 'candidato novo', 'candidatos novos').replace(/^\d+ /, '') },
+              publicouAlguma ? { v: String(x.cands.length), r: x.cands.length === 1 ? 'candidatura no total' : 'candidaturas no total' } : { v: '3 meses', r: 'grátis na 1ª vaga' }];
             if (!completo) stats[0] = { v: pct + '%', r: 'perfil completo', id: 'pct' };
             resumo = !publicouAlguma ? 'Tudo pronto para publicar a primeira vaga.'
               : (novos.length ? 'Você tem ' + plural(novos.length, 'candidato novo', 'candidatos novos') + ' para responder.' : 'Tudo em dia com os candidatos.');
             var pend = [];
+            var plano = situacaoPlano(x.assinatura);
+            if (plano.alerta) pend.push(linha('plano.html', 'clock', plano.titulo, plano.texto, 'plano-alerta', 'amber'));
             if (linhasContr) pend.push(linhasContr);
             if (linhaMsgs) pend.push(linhaMsgs);
             if (atrasados.length) pend.push(linha('candidatos.html?status=novo', 'clock', plural(atrasados.length, 'candidato esperando', 'candidatos esperando') + ' há mais de ' + D.prazoRespostaDias + ' dias',
@@ -976,7 +982,11 @@
           '</form>' +
           '<section class="section" id="minha-reputacao"><h2>Minha reputação</h2><div id="rep-area"><p class="row-sub">Carregando…</p></div>' +
             '<a href="contratacoes.html" class="row-link" id="link-contratacoes"><div class="icon-tile">' + icon('briefcase') + '</div><div class="row-main"><div class="row-title">Contratações e avaliações</div>' +
-            '<div class="row-sub">Confirmar, contestar, registrar o fim do vínculo e avaliar</div></div><span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a></section>' +
+            '<div class="row-sub">Confirmar, contestar, registrar o fim do vínculo e avaliar</div></div><span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a>' +
+            '<a href="notificacoes.html#prefs" class="row-link" id="link-avisos"><div class="icon-tile">' + icon('bell') + '</div><div class="row-main"><div class="row-title">Avisos</div>' +
+            '<div class="row-sub">O que receber no app e por e-mail</div></div><span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a>' +
+            (empresa ? '<a href="plano.html" class="row-link" id="link-plano"><div class="icon-tile">' + icon('star') + '</div><div class="row-main"><div class="row-title">Plano</div>' +
+              '<div class="row-sub">Período grátis, limite de vagas e assinatura</div></div><span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a>' : '') + '</section>' +
           (empresa ? '' : '<section class="section" id="exp-verificadas"><h2>Experiência verificada</h2><div id="exp-area"></div></section>') +
           '<section class="card" id="conta"><h2 class="card-title">Conta</h2><p class="row-sub">E-mail: <strong>' + esc(conta.user.email) + '</strong></p>' +
             '<form class="form" id="senha-form" novalidate>' +
@@ -2458,6 +2468,9 @@
     return '';
   }
 
+  // Último dia para avaliar (o prazo vai até o fim desse dia).
+  function prazoAvaliacao(k) { return dataBR(new Date(new Date(k.avaliar_ate).getTime() - 1000).toISOString()); }
+
   function minhasContratacoes(conta) {
     var q = sb.from('contratacoes').select(SELECT_CONTRATACAO).order('criado_em', { ascending: false });
     q = ladoDe(conta) === 'empresa' ? q.eq('empresa_id', conta.dados.id) : q.eq('profissional_id', conta.user.id);
@@ -2501,8 +2514,8 @@
     if (!k.encerrada_em) return { chip: 'green', rotulo: 'Vínculo ativo', acao: 'ativo', pend: false,
       texto: 'Confirmada em ' + dataBR(k.confirmada_em) + '. Quando o trabalho terminar, registre o fim do vínculo: a avaliação dos dois lados abre por ' + D.prazoRespostaDias + ' dias.' };
     if (!minha && aberta) return { chip: 'blue', rotulo: 'Avalie ' + primeiro, pend: true, acao: 'avaliar',
-      texto: 'Vínculo encerrado em ' + dataBR(k.encerrada_em) + '. A avaliação fica aberta até ' + dataBR(k.avaliar_ate) + ' e só é publicada quando os dois avaliarem ou o prazo terminar.' };
-    if (minha && !dele && aberta) return { chip: 'green', rotulo: 'Avaliação enviada', pend: false, texto: 'Fica oculta até ' + outro + ' avaliar ou o prazo terminar, em ' + dataBR(k.avaliar_ate) + '.' };
+      texto: 'Vínculo encerrado em ' + dataBR(k.encerrada_em) + '. A avaliação fica aberta até ' + prazoAvaliacao(k) + ' e só é publicada quando os dois avaliarem ou o prazo terminar.' };
+    if (minha && !dele && aberta) return { chip: 'green', rotulo: 'Avaliação enviada', pend: false, texto: 'Fica oculta até ' + outro + ' avaliar ou o prazo terminar, em ' + prazoAvaliacao(k) + '.' };
     return { chip: 'green', rotulo: 'Concluída', pend: false, texto: 'Vínculo encerrado em ' + dataBR(k.encerrada_em) + '.' + (minha || dele ? ' As avaliações estão publicadas.' : ' A avaliação fechou sem envios.') };
   }
 
@@ -2799,7 +2812,7 @@
         '<form class="form" id="av-form" novalidate>' +
           '<section class="card"><h2 class="card-title">Como foi trabalhar com ' + esc(outro) + '?</h2>' +
             '<p class="row-sub">' + esc(k.funcao) + ' · ' + (k.data_inicio ? dataBR(k.data_inicio) + ' a ' : '') + dataBR(k.encerrada_em) + '</p>' +
-            aviso('Avaliação cega: ' + outro.split(' ')[0] + ' não vê a sua antes de enviar a dele(a), e você também não. As duas são publicadas juntas, ou quando o prazo terminar em ' + dataBR(k.avaliar_ate) + '.') +
+            aviso('Avaliação cega: ' + outro.split(' ')[0] + ' não vê a sua antes de enviar a dele(a), e você também não. As duas são publicadas juntas, ou quando o prazo terminar em ' + prazoAvaliacao(k) + '.') +
           '</section>' +
           '<section class="card"><h2 class="card-title">Perguntas objetivas</h2>' +
             perguntas.map(function (p) {
@@ -2834,12 +2847,152 @@
           if (r.error) { ocupado(btn, false); status(erroComDetalhe(r.error)); return; }
           $('#content').innerHTML = '<div class="done"><div class="icon-tile lg blue">' + icon('check', 30, { stroke: 2 }) + '</div>' +
             '<h2 id="done-title" tabindex="-1">Avaliação enviada</h2>' +
-            '<p class="done-text">Ela fica oculta até ' + esc(outro) + ' avaliar ou o prazo terminar, em ' + dataBR(k.avaliar_ate) + '. Depois disso, as duas são publicadas juntas.</p>' +
+            '<p class="done-text">Ela fica oculta até ' + esc(outro) + ' avaliar ou o prazo terminar, em ' + prazoAvaliacao(k) + '. Depois disso, as duas são publicadas juntas.</p>' +
             '<div class="btn-row done-actions"><a href="contratacoes.html" class="btn btn-primary">Contratações</a><a href="inicio.html" class="btn btn-outline">Início</a></div></div>';
           window.scrollTo(0, 0); $('#done-title').focus();
         });
       });
     }
+  }
+
+
+  /* =====================================================================
+   * ETAPA 6 — AVISOS E PLANO
+   * ===================================================================== */
+
+  var CATEGORIAS_AVISO = {
+    mensagens: { rotulo: 'Mensagens', texto: 'Nova mensagem numa conversa', icone: 'message' },
+    candidaturas: { rotulo: 'Candidaturas', texto: 'Candidatura nova, retorno da empresa, vaga encerrada', icone: 'clipboard' },
+    contratacao: { rotulo: 'Contratação e combinado', texto: 'Pedido de confirmação, contestação, recusa', icone: 'check' },
+    avaliacoes: { rotulo: 'Avaliações', texto: 'Avaliação aberta, a outra parte avaliou, avaliações publicadas', icone: 'star' }
+  };
+
+  function tempoRelativo(iso) {
+    var min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (min < 1) return 'agora';
+    if (min < 60) return 'há ' + min + ' min';
+    var h = Math.floor(min / 60);
+    if (h < 24) return 'há ' + h + ' h';
+    var d = Math.floor(h / 24);
+    return d === 1 ? 'ontem' : (d < 7 ? 'há ' + d + ' dias' : dataBR(iso));
+  }
+
+  // Sino do topo do início, com o número de avisos não lidos.
+  function sino() {
+    return sb.from('notificacoes').select('id', { count: 'exact', head: true }).is('lida_em', null).then(function (r) {
+      var n = r.count || 0;
+      return '<a href="notificacoes.html" class="icon-btn" id="sino" aria-label="Avisos' + (n ? ', ' + n + (n === 1 ? ' novo' : ' novos') : '') + '">' +
+        icon('bell') + (n ? '<span class="bell-count" aria-hidden="true">' + (n > 99 ? '99+' : n) + '</span>' : '') + '</a>';
+    }).catch(function () { return '<a href="notificacoes.html" class="icon-btn" id="sino" aria-label="Avisos">' + icon('bell') + '</a>'; });
+  }
+
+  /* ---------- Avisos ---------- */
+
+  function renderNotificacoes() {
+    topo('Avisos', 'inicio.html');
+    var conta, lista = [], prefs = {};
+    contaDoTipo().then(function (c) {
+      if (!c) return;
+      conta = c;
+      navBeta(conta.perfil.tipo, 'inicio');
+      return Promise.all([
+        sb.from('notificacoes').select('*').order('criado_em', { ascending: false }).limit(60),
+        sb.from('notificacao_prefs').select('*').eq('user_id', conta.user.id)
+      ]).then(function (rs) {
+        if (rs[0].error) throw rs[0].error;
+        lista = rs[0].data || [];
+        (rs[1].data || []).forEach(function (p) { prefs[p.categoria] = p; });
+        pintar();
+        // Abrir a tela marca tudo como lido (as novas continuam destacadas até sair).
+        if (lista.some(function (n) { return !n.lida_em; })) sb.from('notificacoes').update({ lida_em: new Date().toISOString() }).is('lida_em', null).then(function () {});
+      });
+    }).catch(function (err) { erroCarregar(err); });
+
+    function item(n) {
+      var cat = CATEGORIAS_AVISO[n.categoria] || { icone: 'bell' };
+      return '<a class="row-link notif' + (n.lida_em ? '' : ' notif-nova') + '" href="' + esc(n.link || 'inicio.html') + '">' +
+        '<div class="icon-tile' + (n.lida_em ? '' : ' blue') + '">' + icon(cat.icone) + '</div>' +
+        '<div class="row-main"><div class="row-title">' + esc(n.titulo) + '</div>' + (n.texto ? '<div class="row-sub">' + esc(n.texto) + '</div>' : '') +
+        '<div class="row-sub notif-quando">' + tempoRelativo(n.criado_em) + (n.lida_em ? '' : '<span class="visually-hidden">, novo</span>') + '</div></div>' +
+        '<span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a>';
+    }
+
+    function pintar() {
+      var novas = lista.filter(function (n) { return !n.lida_em; }), antigas = lista.filter(function (n) { return n.lida_em; });
+      $('#content').innerHTML =
+        (lista.length ? '' : vazio('Nenhum aviso ainda', 'Mensagens, candidaturas, contratações e avaliações aparecem aqui.')) +
+        (novas.length ? '<section class="section" aria-labelledby="h-novas"><h2 id="h-novas">Novos</h2>' + novas.map(item).join('') + '</section>' : '') +
+        (antigas.length ? '<section class="section" aria-labelledby="h-antigas"><h2 id="h-antigas">' + (novas.length ? 'Anteriores' : 'Avisos') + '</h2>' + antigas.map(item).join('') + '</section>' : '') +
+        '<section class="section" id="prefs" aria-labelledby="h-prefs"><h2 id="h-prefs">Como receber</h2>' +
+          '<div class="card"><p class="row-sub">Escolha o que aparece aqui no app e o que chega por e-mail.</p>' +
+          Object.keys(CATEGORIAS_AVISO).map(function (k) {
+            var c = CATEGORIAS_AVISO[k], p = prefs[k] || { push: true, email: true };
+            return '<fieldset class="pref-linha"><legend class="row-title">' + esc(c.rotulo) + '</legend><p class="row-sub">' + esc(c.texto) + '</p>' +
+              '<label class="check-row"><input type="checkbox" data-pref="' + k + '" data-canal="push"' + (p.push ? ' checked' : '') + '><span>No app</span></label>' +
+              '<label class="check-row"><input type="checkbox" data-pref="' + k + '" data-canal="email"' + (p.email ? ' checked' : '') + '><span>Por e-mail</span></label></fieldset>';
+          }).join('') +
+          '<p class="row-sub">Os avisos por e-mail começam a ser enviados em breve; sua escolha já fica guardada.</p></div></section>';
+    }
+
+    $('#content').addEventListener('change', function (e) {
+      var cb = e.target.closest('[data-pref]');
+      if (!cb) return;
+      var cat = cb.getAttribute('data-pref');
+      var atual = prefs[cat] || { push: true, email: true };
+      var novo = { user_id: conta.user.id, categoria: cat, push: atual.push, email: atual.email };
+      novo[cb.getAttribute('data-canal')] = cb.checked;
+      sb.from('notificacao_prefs').upsert(novo).then(function (r) {
+        if (r.error) { cb.checked = !cb.checked; toast(erroComDetalhe(r.error)); return; }
+        prefs[cat] = novo;
+        toast('Preferência salva.');
+      });
+    });
+  }
+
+  /* ---------- Plano da empresa ---------- */
+
+  function situacaoPlano(a, ativas) {
+    if (!a) return { fase: 'antes', titulo: '3 meses grátis', texto: 'O período grátis do plano Essencial começa quando você publicar a primeira vaga. O cartão só é pedido no fim.' };
+    var dias = Math.ceil((new Date(a.gratis_ate).getTime() - Date.now()) / 86400000);
+    if (a.status === 'ativa') return { fase: 'ativa', titulo: 'Plano Essencial ativo', texto: 'Até ' + a.limite_vagas_ativas + ' vagas ativas e ' + a.limite_convites_mes + ' convites diretos por mês.' };
+    if (a.status === 'encerrada' || dias <= 0) return { fase: 'encerrado', titulo: 'O período grátis terminou', alerta: true,
+      texto: 'Suas vagas continuam guardadas, mas não dá para publicar nem reativar vagas até escolher um plano.' };
+    return { fase: 'gratis', dias: dias, titulo: 'Período grátis · ' + plural(dias, 'dia restante', 'dias restantes'), alerta: dias <= 7,
+      texto: 'Grátis até ' + dataBR(a.gratis_ate) + '. Depois disso, escolha o Essencial para continuar publicando. Suas vagas não são apagadas.' };
+  }
+
+  function renderPlano() {
+    topo('Plano', 'perfil.html');
+    contaDoTipo('empresa').then(function (conta) {
+      if (!conta) return;
+      navBeta('empresa', 'perfil');
+      return Promise.all([
+        sb.from('assinaturas').select('*').eq('empresa_id', conta.dados.id).maybeSingle(),
+        sb.from('vagas').select('id', { count: 'exact', head: true }).eq('empresa_id', conta.dados.id).eq('status', 'aberta')
+      ]).then(function (rs) {
+        var a = rs[0].data, ativas = rs[1].count || 0;
+        var st = situacaoPlano(a, ativas);
+        var limite = a ? a.limite_vagas_ativas : 3;
+        $('#content').innerHTML =
+          '<section class="card' + (st.alerta ? ' card-warn' : '') + '" id="plano-situacao"><div class="head-row"><h2 class="card-title">' + esc(st.titulo) + '</h2>' +
+            '<span class="chip ' + (st.fase === 'encerrado' ? 'red' : st.fase === 'ativa' ? 'green' : 'blue') + '">' + (st.fase === 'ativa' ? 'Ativo' : st.fase === 'encerrado' ? 'Encerrado' : 'Grátis') + '</span></div>' +
+            '<p class="row-sub">' + esc(st.texto) + '</p>' +
+            '<dl class="summary"><div><dt>Vagas ativas</dt><dd id="uso-vagas">' + ativas + ' de ' + limite + '</dd></div>' +
+              (a ? '<div><dt>Grátis desde</dt><dd>' + dataBR(a.gratis_desde) + '</dd></div>' : '') + '</dl></section>' +
+          '<section class="section"><h2>Plano Essencial</h2><div class="card plano-card">' +
+            '<div class="plano-preco"><b>US$ 79</b><span>por mês</span></div>' +
+            '<ul class="check-list">' + ['Até 3 vagas ativas', 'Indicações completas de profissionais', '30 convites diretos por mês', 'Filtros avançados na busca'].map(function (x) {
+              return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>';
+            }).join('') + '</ul>' +
+            (st.fase === 'ativa' ? '' : '<button type="button" class="btn btn-primary" id="assinar" data-proxima>Assinar o Essencial</button>' +
+              '<p class="row-sub">A assinatura pelo app chega na próxima etapa da beta. Até lá, o período grátis segue valendo.</p>') +
+          '</div></section>' +
+          '<section class="section"><h2>Sempre grátis</h2><div class="card"><ul class="check-list">' +
+            ['Confirmar contratações e avaliar', 'Conversar com candidatos', 'Responder candidaturas'].map(function (x) {
+              return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>';
+            }).join('') + '</ul><p class="row-sub">Cobrar pelo preenchimento faria empresas deixarem de marcar vagas como preenchidas, e sem vínculo verificado não existe reputação.</p></div></section>';
+      });
+    }).catch(function (err) { erroCarregar(err, 'perfil.html'); });
   }
 
   var PAGES = {
@@ -2860,7 +3013,9 @@
     conversa: renderConversa,
     'registrar-contratacao': renderRegistrarContratacao,
     contratacoes: renderContratacoes,
-    avaliar: renderAvaliar
+    avaliar: renderAvaliar,
+    notificacoes: renderNotificacoes,
+    plano: renderPlano
   };
 
   var page = document.body.dataset.page;
