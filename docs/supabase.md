@@ -10,8 +10,8 @@ não usa o banco: isso começa na etapa 2.
 | --- | --- | --- |
 | 1. Esquema | Tabelas, regras de acesso (RLS), regras de negócio, currículos, mensagens em tempo real | **Pronto** e aplicado |
 | 2. Contas | Cadastro, confirmação de e-mail, entrar, sair, recuperar senha, perfil da empresa e do profissional | **Pronto**: `app/` |
-| 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos, convites, salvos | Próxima |
-| 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do WhatsApp | |
+| 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos | **Pronto** (convites e salvos ficam para depois) |
+| 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do WhatsApp | Próxima |
 | 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | |
 | 6. Avisos e plano | E-mails e notificações, lembrete de 7 dias, cobrança do plano | |
 
@@ -36,6 +36,24 @@ A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
 - **País e cidade**: primeiro o país (todos os países, com Brasil, Estados Unidos e Portugal no topo; o padrão vem do idioma do navegador), depois a cidade com busca: digitando "laco" aparece "Laconia, NH". Aceita nome sem acento e "cidade, estado". São cerca de 170 mil cidades (mais de 1.000 habitantes ou sedes de município); quem mora numa cidade menor escolhe a mais próxima. O banco guarda o código do país (BR, US…), a cidade, o estado (sigla quando existe) e o ponto aproximado. Nos EUA, as distâncias aparecem em milhas.
 
 Teste automatizado: `docs/tests/contas-supabase-simulado.js` roda as telas num navegador contra um Supabase simulado (63 verificações).
+
+### Etapa 3: vagas e candidaturas
+
+| Tela | Quem | O que faz |
+| --- | --- | --- |
+| `publicar-vaga.html` (`?id=` para editar) | Empresa | Cargo, tipo, descrição, posições; presencial/híbrida com país, cidade e raio (km ou mi) ou remota com fuso; salário opcional; experiência, requisitos e competências; até 3 perguntas de triagem (sim/não ou opções), sem temas proibidos. Publicar ou salvar rascunho. |
+| `vagas.html` | Empresa | Minhas vagas por estado (abertas, pausadas, rascunhos, encerradas), com número de candidatos e ações: publicar, editar, pausar, reativar, cancelar (avisa os candidatos), apagar rascunho. |
+| `candidatos.html?vaga=` | Empresa | Candidatos por etapa (novos, em conversa, não selecionados…), com distância até a vaga, competências em comum, prazo de 7 dias, mensagem, respostas da triagem e pretensão. Chamar para conversa ou não selecionar. |
+| `ver-profissional.html?id=` | Empresa | Perfil do candidato: o que procura, competências (em comum com a vaga), sobre, experiências verificadas e declaradas. |
+| `buscar.html` | Profissional | Vagas abertas, por texto e modelo, só dentro da distância dele (e remotas) ou todas, das mais próximas para as remotas. |
+| `vaga.html?id=` | Todos | Detalhe da vaga. O profissional se candidata (triagem, mensagem, pretensão); a empresa dona edita ou vê candidatos; quem não entrou vê a vaga e o convite para entrar. |
+| `candidaturas.html` | Profissional | Em andamento e encerradas, com status, prazo de resposta e a opção de retirar. |
+
+O início mostra os números reais: para a empresa, vagas abertas, candidatos novos e quem espera resposta há mais de 7 dias; para o profissional, as vagas perto dele e as candidaturas em andamento.
+
+As regras continuam no banco: limite de 3 vagas ativas, período grátis a partir da primeira vaga, candidatura só em vaga aberta e uma por vaga, empresa só move entre novo/em conversa/não selecionado, cancelar a vaga encerra as candidaturas em andamento.
+
+Teste: `docs/tests/vagas-supabase-local.js` roda as telas contra um "Supabase local" (PostgreSQL com o esquema e o RLS reais + PostgREST 12 + login simulado, em `supabase/tests/local/`): 42 verificações, da publicação à vaga cancelada.
 
 ### Modelos de e-mail em português
 

@@ -12,5 +12,34 @@ window.KOR_DADOS = {
   canais: [{ id: 'whatsapp', rotulo: 'WhatsApp' }, { id: 'sms', rotulo: 'SMS' }, { id: 'email', rotulo: 'E-mail' }],
   disponibilidades: ['Disponível imediatamente', 'Disponível em 15 dias', 'Disponível em 30 dias', 'Empregado(a), aberto(a) a propostas'],
   distancias: [5, 10, 15, 25, 40, 60, 100],
-  limiteCompetencias: 12
+  limiteCompetencias: 12,
+
+  // Vagas (seção 7)
+  tipos: [{ id: 'integral', rotulo: 'Tempo integral' }, { id: 'meio_periodo', rotulo: 'Meio período' }, { id: 'temporario', rotulo: 'Temporário' }, { id: 'freelancer', rotulo: 'Freelancer' }],
+  moedas: [{ id: 'BRL', rotulo: 'R$ · Real' }, { id: 'USD', rotulo: 'US$ · Dólar' }, { id: 'EUR', rotulo: '€ · Euro' }, { id: 'GBP', rotulo: '£ · Libra' }],
+  moedaPorPais: { BR: 'BRL', US: 'USD', PT: 'EUR', ES: 'EUR', DE: 'EUR', FR: 'EUR', IT: 'EUR', IE: 'EUR', NL: 'EUR', GB: 'GBP' },
+  periodos: [{ id: 'hora', rotulo: 'por hora' }, { id: 'mes', rotulo: 'por mês' }, { id: 'ano', rotulo: 'por ano' }],
+  experiencias: ['Sem experiência', 'Até 1 ano', '1 a 2 anos', '3 a 5 anos', 'Mais de 5 anos'],
+  // Raio de busca das vagas presenciais e híbridas: 25 milhas nos EUA, 40 km nos demais.
+  raios: { km: [10, 25, 40, 60, 100], mi: [5, 10, 25, 40, 60] },
+  raioPadrao: { km: 40, mi: 25 },
+  fusos: [
+    { id: -8, rotulo: 'UTC−8 · Los Angeles' }, { id: -6, rotulo: 'UTC−6 · Cidade do México' },
+    { id: -5, rotulo: 'UTC−5 · Nova York, Miami, Toronto' }, { id: -3, rotulo: 'UTC−3 · Brasília, Buenos Aires' },
+    { id: 0, rotulo: 'UTC+0 · Lisboa, Londres' }, { id: 1, rotulo: 'UTC+1 · Madri, Berlim' }
+  ],
+  limiteRequisitos: 10,
+  limitePerguntasTriagem: 3,
+  limiteOpcoesTriagem: 4,
+  prazoRespostaDias: 7,
+  // Perguntas de triagem não podem tocar nestes temas (proibidos por lei em muitos países).
+  termosProibidosTriagem: [
+    'idade', 'anos de idade', 'quantos anos', 'data de nascimento', 'ano de nascimento',
+    'gênero', 'genero', 'sexo', 'homem', 'mulher',
+    'raça', 'raca', 'cor da pele', 'etnia',
+    'religião', 'religiao', 'crença', 'crenca',
+    'estado civil', 'casado', 'casada', 'solteiro', 'solteira', 'divorciado', 'divorciada', 'viúvo', 'viuvo', 'viúva', 'viuva',
+    'filho', 'filhos', 'filha', 'filhas', 'gravidez', 'grávida', 'gravida', 'gestante', 'maternidade', 'paternidade',
+    'nacionalidade', 'origem', 'estrangeiro', 'estrangeira', 'imigrante'
+  ]
 };

@@ -59,6 +59,7 @@ function dono(tab, row, uid) { return tab === 'empresas' ? row.dono === uid : ta
 function rest(method, path, q, body, h) {
   const tab = path.replace('/rest/v1/', ''); const uid = uidDe(h); log.push(method + ' ' + tab);
   if (!uid) return { status: 401, body: { message: 'JWT' } };
+  if (!db[tab]) return (h['accept'] || '').includes('vnd.pgrst.object') ? { status: 406, body: { code: 'PGRST116', message: 'no rows' } } : { status: 200, body: [] };  // tabelas da etapa 3: vazias aqui
   const filtros = [...q.entries()].filter(([k]) => !['select', 'on_conflict', 'columns'].includes(k)).map(([k, v]) => [k, v.replace(/^eq\./, '')]);
   let rows = Object.values(db[tab]).filter(r => dono(tab, r, uid) && filtros.every(([k, v]) => String(r[k]) === v));
   if (method === 'PATCH') rows.forEach(r => Object.assign(r, body));
@@ -153,7 +154,7 @@ function rest(method, path, q, body, h) {
   L(/40%/.test(await t('#pct')), 'início: progresso 40% ' + await t('#pct'));
   L(!!(await pg.$('.hero-c')) && /Reputação em construção/.test(await t('.hero-c')) && /16 mi/.test(await t('.hero-c')), 'início: topo escuro do protótipo, distância em milhas nos EUA: ' + await t('.hero-stats'));
   L((await t('#nav [aria-current]')) === 'Início' && (await pg.$$('#nav a')).length === 5, 'início: navegação inferior');
-  await pg.click('#nav a:has-text("Buscar")');
+  await pg.click('#nav a:has-text("Mensagens")');
   L(/próxima etapa/.test(await t('#toast')), 'início: abas futuras avisam a próxima etapa');
   L(!(await hs()) && await btnsOk(), 'início: layout');
   await pg.screenshot({ path: require('os').tmpdir() + '/kor-inicio.png', fullPage: true });
@@ -181,8 +182,7 @@ function rest(method, path, q, body, h) {
   L(!(await pg.$('#completar')) && !!(await pg.$('#sem-vagas')) && !!(await pg.$('.search-c')), 'início: perfil completo vira a página principal (busca e vagas)');
   L(/perfil está completo/.test(await t('.hero-c')) && /vagas perto de você/.test(await t('.hero-stats')), 'início: topo da página principal');
   L(/Campinas, SP/.test(await t('#sem-vagas')) && /Recepcionista/.test(await t('#editar-perfil')) && /3 competências/.test(await t('#editar-perfil')), 'início: vagas vazias com a cidade e resumo do perfil: ' + await t('#editar-perfil'));
-  await pg.click('#busca');
-  L(/próxima etapa/.test(await t('#toast')), 'início: busca avisa a próxima etapa');
+  L((await pg.getAttribute('#busca', 'href')) === 'buscar.html', 'início: busca leva à tela de vagas');
   L(!(await hs()) && await btnsOk(), 'início completo: layout');
   // 6. Sair
   await pg.goto(B + 'perfil.html'); await pg.waitForSelector('#sair');
@@ -235,7 +235,7 @@ function rest(method, path, q, body, h) {
   await pg.fill('#p-descricao', 'Padaria de bairro com 3 lojas em Campinas, pães artesanais desde 1998.');
   await pg.check('input[name=p-canal][value=email]');
   await pg.click('#salvar'); await pg.waitForURL(/inicio\.html/); await pg.waitForSelector('#ola');
-  L(e.cidade === 'Campinas' && e.estado === 'SP' && e.porte === '10 a 49 pessoas' && !!(await pg.$('#primeira-vaga')) && /Buscar profissionais/.test(await t('#busca')), 'empresa: perfil completo vira a página principal ' + JSON.stringify(e));
+  L(e.cidade === 'Campinas' && e.estado === 'SP' && e.porte === '10 a 49 pessoas' && !!(await pg.$('#primeira-vaga')) && /Publicar uma vaga/.test(await t('#busca')), 'empresa: perfil completo vira a página principal ' + JSON.stringify(e));
   L(!Object.values(db.profissionais).some(p => p.nome === 'Hackeado'), 'rls simulado ok');
   // 10. Cadastro repetido
   await pg.goto(B + 'perfil.html'); await pg.waitForSelector('#sair'); await pg.click('#sair'); await pg.waitForURL(/saiu=1/);
