@@ -160,7 +160,8 @@ const B = 'http://localhost:8765/app/';
   await pe.click('.cand-card a:has-text("Ver perfil")'); await pe.waitForSelector('.page-title');
   L((await te('.page-title')) === 'João Silva' && /Em comum com a vaga: Atendimento, Caixa/.test(await te('#content')) && /reputação em construção/.test(await te('#content')), 'ver profissional: perfil e competências em comum');
   await pe.goBack(); await pe.waitForSelector('.cand-card');
-  await pe.click('[data-cand=conversa]'); await pe.waitForSelector('#cand-filter:has-text("Em conversa · 1")');
+  await pe.click('[data-cand=conversa]'); await pe.waitForURL(/conversa\.html/);
+  await pe.goto(B + 'candidatos.html?vaga=' + vA.id + '&status=conversa'); await pe.waitForSelector('#cand-filter:has-text("Em conversa · 1")');
   L((await local.sql('select status from candidaturas where id = $1', [c.id]))[0].status === 'conversa', 'candidatos: chamar para conversa');
   L(!(await hs(pe)) && await btnsOk(pe), 'candidatos: layout');
 

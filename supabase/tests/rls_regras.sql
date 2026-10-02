@@ -272,6 +272,24 @@ reset role;
 set role anon;
 select public.confere('visitante: vê avaliações publicadas', $q$ select count(*) = 2 from avaliacoes $q$);
 
+-- ----------------------------------------------------------------- CONVERSAS E PERFIL OCULTO (etapa 4)
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000e2', false);
+set role authenticated;
+select public.teste('conversa: empresa não abre conversa com perfil oculto que não se candidatou a ela',
+  $q$ insert into conversas (empresa_id, profissional_id) values ((select e2 from ids), '00000000-0000-0000-0000-0000000000a2') $q$, true);
+select public.teste('conversa: empresa abre conversa com perfil visível',
+  $q$ insert into conversas (empresa_id, profissional_id) values ((select e2 from ids), '00000000-0000-0000-0000-0000000000a1') $q$);
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', false);
+set role authenticated;
+select public.teste('conversa: profissional oculta abre conversa com outra empresa',
+  $q$ insert into conversas (empresa_id, profissional_id) values ((select e2 from ids), auth.uid()) $q$);
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000e2', false);
+set role authenticated;
+select public.confere('conversa: a empresa vê o perfil oculto de quem conversa com ela', $q$ select count(*) = 1 from profissionais where id = '00000000-0000-0000-0000-0000000000a2' $q$);
+
 -- ----------------------------------------------------------------- CONVITES E ENCERRAMENTO
 reset role;
 update assinaturas set limite_convites_mes = 1;

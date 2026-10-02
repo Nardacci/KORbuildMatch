@@ -154,8 +154,7 @@ function rest(method, path, q, body, h) {
   L(/40%/.test(await t('#pct')), 'início: progresso 40% ' + await t('#pct'));
   L(!!(await pg.$('.hero-c')) && /Reputação em construção/.test(await t('.hero-c')) && /16 mi/.test(await t('.hero-c')), 'início: topo escuro do protótipo, distância em milhas nos EUA: ' + await t('.hero-stats'));
   L((await t('#nav [aria-current]')) === 'Início' && (await pg.$$('#nav a')).length === 5, 'início: navegação inferior');
-  await pg.click('#nav a:has-text("Mensagens")');
-  L(/próxima etapa/.test(await t('#toast')), 'início: abas futuras avisam a próxima etapa');
+  L((await pg.getAttribute('#nav [data-nav=mensagens]', 'href')) === 'mensagens.html' && (await pg.getAttribute('#nav [data-nav=buscar]', 'href')) === 'buscar.html', 'início: abas da navegação levam às telas reais');
   L(!(await hs()) && await btnsOk(), 'início: layout');
   await pg.screenshot({ path: require('os').tmpdir() + '/kor-inicio.png', fullPage: true });
   // 5. Perfil

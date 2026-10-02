@@ -11,8 +11,8 @@ não usa o banco: isso começa na etapa 2.
 | 1. Esquema | Tabelas, regras de acesso (RLS), regras de negócio, currículos, mensagens em tempo real | **Pronto** e aplicado |
 | 2. Contas | Cadastro, confirmação de e-mail, entrar, sair, recuperar senha, perfil da empresa e do profissional | **Pronto**: `app/` |
 | 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos | **Pronto** (convites e salvos ficam para depois) |
-| 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do WhatsApp | Próxima |
-| 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | |
+| 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do contato | **Pronto** (aplicar `20261003000000_conversas.sql`) |
+| 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | Próxima |
 | 6. Avisos e plano | E-mails e notificações, lembrete de 7 dias, cobrança do plano | |
 
 Enquanto isso, o protótipo com dados fictícios continua no ar como demonstração, na raiz do site.
@@ -54,6 +54,28 @@ O início mostra os números reais: para a empresa, vagas abertas, candidatos no
 As regras continuam no banco: limite de 3 vagas ativas, período grátis a partir da primeira vaga, candidatura só em vaga aberta e uma por vaga, empresa só move entre novo/em conversa/não selecionado, cancelar a vaga encerra as candidaturas em andamento.
 
 Teste: `docs/tests/vagas-supabase-local.js` roda as telas contra um "Supabase local" (PostgreSQL com o esquema e o RLS reais + PostgREST 12 + login simulado, em `supabase/tests/local/`): 42 verificações, da publicação à vaga cancelada.
+
+### Etapa 4: mensagens
+
+**Antes de publicar esta etapa, aplique no SQL Editor** o arquivo
+[`supabase/migrations/20261003000000_conversas.sql`](../supabase/migrations/20261003000000_conversas.sql)
+(pode rodar mais de uma vez). Ele permite que a empresa veja o perfil de quem conversa com ela e impede
+que uma empresa abra conversa com um perfil oculto que não se candidatou às vagas dela.
+
+| Tela | O que faz |
+| --- | --- |
+| `mensagens.html` | Conversas da conta, as não lidas em destaque, com a vaga e a última mensagem. Filtro **Sem resposta** (quem escreveu por último foi o outro lado), com respostas rápidas e resposta ali mesmo. |
+| `conversa.html?id=` | Mensagens em tempo real (Supabase Realtime, com conferência a cada poucos segundos se a conexão cair), Enter para enviar, link para a vaga e para o perfil. **Troca de contato**: cada lado compartilha o seu; quando os dois compartilham, aparece o contato do outro (WhatsApp, SMS ou e-mail) com o botão para abrir. Denunciar conversa. |
+
+Onde a conversa começa: **Chamar para conversa** na lista de candidatos (muda o status e abre a conversa com
+uma mensagem sugerida), **Mensagem** para quem já está em conversa, e **Tirar dúvida com a empresa** na vaga.
+É uma conversa por par empresa–profissional. A aba Mensagens mostra quantas conversas não foram lidas, e o
+início mostra as mensagens sem resposta.
+
+O lado de quem escreve e o autor vêm do login (gatilho do banco), e o contato só é entregue pela função
+`contato_da_conversa` depois que os dois compartilham.
+
+Teste: `docs/tests/mensagens-supabase-local.js` (24 verificações).
 
 ### Modelos de e-mail em português
 
@@ -128,11 +150,11 @@ Tudo isto vale mesmo que alguém altere o JavaScript do site, porque as regras r
 ## Testar o esquema
 
 `supabase/tests/rls_regras.sql` simula duas empresas, dois profissionais e um visitante sem conta,
-e confere as regras acima. São 109 verificações. **Rode só num projeto de teste**, porque o
+e confere as regras acima. São 113 verificações. **Rode só num projeto de teste**, porque o
 arquivo cria usuários fictícios.
 
 - No Supabase: crie um projeto de teste, aplique o esquema e rode o arquivo de testes no SQL Editor.
-  A última consulta mostra "109 / 109 passaram".
+  A última consulta mostra "113 / 113 passaram".
 - Localmente, com PostgreSQL 16, num banco vazio:
   ```
   psql -d kor -f supabase/tests/supabase_local_stub.sql   # imita os esquemas auth e storage do Supabase
