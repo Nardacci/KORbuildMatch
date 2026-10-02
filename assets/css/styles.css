@@ -1598,3 +1598,19 @@ body[data-page="demo"] .app {
 .combo-vazio { padding: 10px; font-size: 14px; color: var(--muted); }
 .sobre-hero { position: relative; z-index: 1; margin-top: -48px; box-shadow: 0 10px 24px -12px rgba(10, 22, 40, 0.45); }
 .combo input { width: 100%; box-sizing: border-box; }
+
+/* ---------- Versão real: vagas e candidaturas ---------- */
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.exp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.exp-item { padding: 12px 16px; border-bottom: 1px solid var(--neutral-tint); }
+.exp-item:last-child { border-bottom: 0; }
+.search-form input {
+  width: 100%; box-sizing: border-box; min-height: 52px; padding: 0 16px;
+  border: 1px solid var(--line-strong); border-radius: 16px; background: #FFFFFF;
+  font: inherit; font-size: 15px; color: var(--ink);
+}
+.search-form input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.confirmar { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--radius-sm); }
+.triagem-item { display: flex; flex-direction: column; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--neutral-tint); }
+.vaga-item .chips, .cand-card .chips { margin-top: 2px; }
+#nova-vaga { align-self: flex-start; }
