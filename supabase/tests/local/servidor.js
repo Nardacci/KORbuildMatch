@@ -117,37 +117,70 @@ async function iniciar() {
   throw new Error('PostgREST não subiu');
 }
 
-async function rotear(ctx, urlProjeto) {
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*' };
+function ehJwt(h) { return (h.authorization || '').replace(/^Bearer /, '').split('.').length === 3; }
+
+// Atende um pedido como a API do Supabase (/auth/v1, /rest/v1 e, se configurado, /functions/v1).
+async function atender(method, url, h, corpo, opcoes) {
+  const u = new URL(url);
+  if (method === 'OPTIONS') return { status: 200, headers: CORS, body: '' };
+  if (u.pathname.startsWith('/auth/v1')) {
+    let body = null; try { body = corpo ? JSON.parse(corpo) : null; } catch (e) { /* sem corpo */ }
+    const r = await auth(method, u.pathname, u.searchParams, body, h);
+    return { status: r.status, headers: Object.assign({ 'content-type': 'application/json', 'x-supabase-api-version': '2024-01-01' }, CORS), body: r.body == null ? '' : JSON.stringify(r.body) };
+  }
+  if (u.pathname.startsWith('/rest/v1')) {
+    const headers = {};
+    ['accept', 'content-type', 'prefer', 'range', 'range-unit', 'accept-profile', 'content-profile'].forEach(k => { if (h[k]) headers[k] = h[k]; });
+    if (ehJwt(h)) headers.authorization = h.authorization;  // a chave publicável não é JWT: vira "anon", como no Supabase
+    const r = await fetch('http://localhost:' + PORTA_API + u.pathname.replace('/rest/v1', '') + u.search,
+      { method, headers, body: ['GET', 'HEAD'].includes(method) ? undefined : corpo });
+    const out = Object.assign({}, CORS);
+    ['content-type', 'content-range', 'preference-applied'].forEach(k => { if (r.headers.get(k)) out[k] = r.headers.get(k); });
+    return { status: r.status, headers: out, body: Buffer.from(await r.arrayBuffer()) };
+  }
+  if (u.pathname.startsWith('/functions/v1/') && opcoes && opcoes.funcoes) {
+    const headers = {};
+    ['authorization', 'content-type', 'x-signature', 'x-request-id', 'apikey'].forEach(k => { if (h[k]) headers[k] = h[k]; });
+    const r = await fetch(opcoes.funcoes + u.pathname.replace('/functions/v1', '') + u.search,
+      { method, headers, body: ['GET', 'HEAD'].includes(method) ? undefined : corpo });
+    return { status: r.status, headers: Object.assign({ 'content-type': r.headers.get('content-type') || 'application/json' }, CORS), body: Buffer.from(await r.arrayBuffer()) };
+  }
+  return { status: 404, headers: CORS, body: 'não simulado' };
+}
+
+// opcoes.funcoes: endereço onde a Edge Function está rodando localmente (ex.: http://localhost:8000).
+async function rotear(ctx, urlProjeto, opcoes) {
   await ctx.route(urlProjeto + '/**', async route => {
     const req = route.request();
-    const u = new URL(req.url());
-    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': '*' };
-    if (req.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: cors });
-    const h = req.headers();
     try {
-      if (u.pathname.startsWith('/auth/v1')) {
-        let body = null; try { body = req.postDataJSON(); } catch (e) { /* sem corpo */ }
-        const r = await auth(req.method(), u.pathname, u.searchParams, body, h);
-        return route.fulfill({ status: r.status, headers: Object.assign({ 'content-type': 'application/json', 'x-supabase-api-version': '2024-01-01' }, cors),
-          body: r.body == null ? '' : JSON.stringify(r.body) });
-      }
-      if (u.pathname.startsWith('/rest/v1')) {
-        const headers = {};
-        ['accept', 'content-type', 'prefer', 'range', 'range-unit', 'accept-profile', 'content-profile'].forEach(k => { if (h[k]) headers[k] = h[k]; });
-        if (uidDoToken(h)) headers.authorization = h.authorization;  // a chave publicável não é JWT: vira "anon", como no Supabase
-        const r = await fetch('http://localhost:' + PORTA_API + u.pathname.replace('/rest/v1', '') + u.search,
-          { method: req.method(), headers, body: ['GET', 'HEAD'].includes(req.method()) ? undefined : req.postData() });
-        const out = Object.assign({}, cors);
-        ['content-type', 'content-range', 'preference-applied'].forEach(k => { if (r.headers.get(k)) out[k] = r.headers.get(k); });
-        return route.fulfill({ status: r.status, headers: out, body: Buffer.from(await r.arrayBuffer()) });
-      }
-      return route.fulfill({ status: 404, headers: cors, body: 'não simulado' });
+      const r = await atender(req.method(), req.url(), req.headers(), req.postData(), opcoes);
+      return route.fulfill(r);
     } catch (e) {
       console.error('[supabase local]', e);
-      return route.fulfill({ status: 500, headers: cors, body: JSON.stringify({ message: String(e) }) });
+      return route.fulfill({ status: 500, headers: CORS, body: JSON.stringify({ message: String(e) }) });
     }
   });
 }
+
+// A mesma API numa porta HTTP comum, para as Edge Functions (rodando no Deno) usarem o supabase-js.
+let servidorHttp = null;
+function abrirPorta(porta, opcoes) {
+  return new Promise(resolve => {
+    servidorHttp = require('http').createServer((req, res) => {
+      let corpo = '';
+      req.on('data', c => { corpo += c; });
+      req.on('end', async () => {
+        try {
+          const r = await atender(req.method, 'http://localhost:' + porta + req.url, req.headers, corpo || undefined, opcoes);
+          res.writeHead(r.status, r.headers); res.end(r.body);
+        } catch (e) { res.writeHead(500); res.end(String(e)); }
+      });
+    }).listen(porta, resolve);
+  });
+}
+function chaveServico() { return jwt({ role: 'service_role', iss: 'supabase-local', exp: Math.floor(Date.now() / 1000) + 3600 }); }
+function tokenDe(email) { return sessao(usuarios[email]).access_token; }
 
 // Ajudas para os testes.
 function usuario(email) { return usuarios[email]; }
@@ -159,8 +192,9 @@ function linkComSessao(email, tipo) {
 async function sql(texto, params) { return (await pool.query(texto, params)).rows; }
 
 async function parar() {
+  if (servidorHttp) servidorHttp.close();
   if (proc) proc.kill();
   if (pool) await pool.end();
 }
 
-module.exports = { iniciar, rotear, parar, usuario, confirmar, linkComSessao, sql };
+module.exports = { iniciar, rotear, parar, usuario, confirmar, linkComSessao, sql, abrirPorta, chaveServico, tokenDe };

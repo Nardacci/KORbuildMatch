@@ -345,6 +345,50 @@ select public.confere('notificações: avisos vão sempre para o outro lado (nin
   $q$ select not exists (select 1 from notificacoes n join mensagens m on n.link = 'conversa.html?id=' || m.conversa_id and n.user_id = m.autor
                          where n.texto = left(m.texto, 200)) $q$);
 
+-- ----------------------------------------------------------------- LEMBRETES, FILA DE E-MAILS E PLANOS (etapa 6, parte 2)
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a2', false);
+set role authenticated;
+select public.teste('lembretes: a tela não roda os lembretes', $q$ select public.lembretes_diarios() $q$, true);
+select public.teste('e-mails: a tela não lê a fila de e-mails', $q$ select * from public.avisos_pendentes_email(10, 0) $q$, true);
+select public.teste('e-mails: a tela não marca e-mails como enviados', $q$ select public.marcar_avisos_enviados(array[1::bigint]) $q$, true);
+reset role;
+set role anon;
+select public.confere('planos: o preço do Essencial é público (definido no painel)', $q$ select count(*) = 1 and bool_and(moeda = 'BRL') from planos where id = 'essencial' $q$);
+
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+-- Candidatura "nova" há 8 dias, sem resposta
+update vagas set status = 'pausada' where titulo = 'Recepcionista';
+update assinaturas set gratis_ate = now() + interval '30 days';
+update vagas set status = 'aberta' where titulo = 'Recepcionista';
+insert into candidaturas (vaga_id, profissional_id, status, criado_em)
+  values ((select id from vagas where titulo = 'Recepcionista'), '00000000-0000-0000-0000-0000000000a2', 'novo', now() - interval '8 days');
+update assinaturas set gratis_ate = current_date + 7 + interval '12 hours';
+select public.confere('lembretes: rodam e contam o que avisaram', $q$ select (public.lembretes_diarios() ->> 'candidaturas')::int = 1 $q$);
+select public.confere('lembretes: a empresa é lembrada do candidato esperando',
+  $q$ select count(*) = 1 from notificacoes n join empresas e on e.dono = n.user_id where e.nome = 'Empresa Exemplo' and n.titulo = '1 candidato esperando resposta há mais de 7 dias' $q$);
+select public.confere('lembretes: o profissional sabe que a empresa foi lembrada',
+  $q$ select count(*) = 1 from notificacoes where user_id = '00000000-0000-0000-0000-0000000000a2' and titulo = 'Candidatura sem resposta' $q$);
+select public.confere('lembretes: aviso de 7 dias do período grátis',
+  $q$ select count(*) = 1 from notificacoes where categoria = 'plano' and titulo = 'Faltam 7 dias do período grátis' $q$);
+select public.confere('lembretes: rodar de novo não repete', $q$ select (public.lembretes_diarios() ->> 'candidaturas')::int = 0 $q$);
+
+set role service_role;
+select public.confere('e-mails: a fila agrupa os avisos por pessoa, com o e-mail',
+  $q$ select count(*) >= 2 and bool_and(email like '%@%' and jsonb_array_length(avisos) >= 1) from public.avisos_pendentes_email(50, 0) $q$);
+reset role;
+insert into notificacao_prefs (user_id, categoria, push, email) values ('00000000-0000-0000-0000-0000000000a2', 'candidaturas', true, false)
+  on conflict (user_id, categoria) do update set email = false;
+set role service_role;
+select public.confere('e-mails: respeita "Por e-mail" desligado',
+  $q$ select not exists (select 1 from public.avisos_pendentes_email(50, 0) f, jsonb_array_elements(f.avisos) a
+                         where f.user_id = '00000000-0000-0000-0000-0000000000a2' and a ->> 'categoria' = 'candidaturas') $q$);
+select public.confere('e-mails: marcar como enviados',
+  $q$ select public.marcar_avisos_enviados(array(select (a ->> 'id')::bigint from public.avisos_pendentes_email(50, 0) f, jsonb_array_elements(f.avisos) a)) > 0 $q$);
+select public.confere('e-mails: enviados saem da fila', $q$ select not exists (select 1 from public.avisos_pendentes_email(50, 0)) $q$);
+reset role;
+
 -- ----------------------------------------------------------------- RESUMO
 \set QUIET off
 select n, case when ok then 'PASS' else 'FAIL' end as r, descricao, detalhe from public.resultados_teste order by n;
