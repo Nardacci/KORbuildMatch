@@ -185,9 +185,10 @@ notificações** (modo produção): URL
 assinaturas** (subscription_preapproval). Salve e copie a **assinatura secreta** para o segredo
 `MP_WEBHOOK_SECRET`.
 
-**6. Agendamentos.** Abra [`supabase/agendamentos.sql`](../supabase/agendamentos.sql), troque
-`COLE_AQUI_O_CRON_SECRET` pelo mesmo valor do segredo `CRON_SECRET` e rode no SQL Editor (sem salvar o
-arquivo com o segredo). Ele liga `pg_cron` e `pg_net` e agenda os lembretes (todo dia, 9h de Brasília)
+**6. Agendamentos.** Primeiro guarde no Vault o mesmo valor do segredo `CRON_SECRET`, numa consulta só
+para isso: `select vault.create_secret('SEU_CRON_SECRET', 'kor_cron_secret');`. Depois rode
+[`supabase/agendamentos.sql`](../supabase/agendamentos.sql) inteiro (ele não tem segredo nenhum: lê do Vault).
+Ele liga `pg_cron` e `pg_net` e agenda os lembretes (todo dia, 9h de Brasília),
 os e-mails (a cada 10 minutos) e a cotação do dólar (todo dia, 14h10 de Brasília, depois de o Banco Central
 publicar a PTAX do dia).
 
