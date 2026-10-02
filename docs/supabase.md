@@ -12,8 +12,8 @@ não usa o banco: isso começa na etapa 2.
 | 2. Contas | Cadastro, confirmação de e-mail, entrar, sair, recuperar senha, perfil da empresa e do profissional | **Pronto**: `app/` |
 | 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos | **Pronto** (convites e salvos ficam para depois) |
 | 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do contato | **Pronto** (aplicar `20261003000000_conversas.sql`) |
-| 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | Próxima |
-| 6. Avisos e plano | E-mails e notificações, lembrete de 7 dias, cobrança do plano | |
+| 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | **Pronto** (aplicar `20261004000000_reputacao.sql`) |
+| 6. Avisos e plano | E-mails e notificações, lembrete de 7 dias, cobrança do plano | Próxima |
 
 Enquanto isso, o protótipo com dados fictícios continua no ar como demonstração, na raiz do site.
 A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
@@ -76,6 +76,29 @@ O lado de quem escreve e o autor vêm do login (gatilho do banco), e o contato s
 `contato_da_conversa` depois que os dois compartilham.
 
 Teste: `docs/tests/mensagens-supabase-local.js` (24 verificações).
+
+### Etapa 5: contratação e reputação
+
+**Antes de publicar esta etapa, aplique no SQL Editor** o arquivo
+[`supabase/migrations/20261004000000_reputacao.sql`](../supabase/migrations/20261004000000_reputacao.sql)
+(pode rodar mais de uma vez). Ele cria a visão `avaliacoes_publicas`: só as avaliações já publicadas, com o
+autor resumido ("João S." ou o nome da empresa, que vira "Empresa não divulgada" se o profissional ocultou).
+As contratações continuam privadas entre as duas partes.
+
+| Tela | O que faz |
+| --- | --- |
+| `registrar-contratacao.html` | Registra o combinado (função, tipo, valor, início, jornada), já preenchido com a vaga. A empresa pode marcar a vaga como preenchida no mesmo passo. O profissional também pode registrar (`?empresa=`). Com `?editar=`, quem registrou corrige o combinado depois de uma contestação. |
+| `contratacoes.html` | Central das duas jornadas: confirmar, "algo está diferente" (contestar), "não aconteceu" (recusar), corrigir ou manter e responder, contestar a recusa (vai para a moderação), registrar o fim do vínculo e avaliar. |
+| `avaliar.html?id=` | Avaliação cega: perguntas objetivas (Sim, Parcialmente, Não) com o combinado como referência, nota de 1 a 5 e comentário. Fica oculta até os dois enviarem ou o prazo de 7 dias terminar. |
+
+Onde aparece: **Registrar contratação** na lista de candidatos (quem está em conversa) e o **"Deu certo?"** na
+conversa depois de liberar o contato. A confirmação vira experiência verificada no perfil (com a opção de
+ocultar o nome da empresa). A **reputação** (nota, trabalhos ou contratações verificadas, pagou conforme,
+contrataria/trabalharia de novo) aparece no topo do início, no perfil do candidato, em "Sobre a empresa" na
+vaga e em "Minha reputação" no perfil, onde dá para responder às avaliações recebidas. Com menos de 3
+avaliações, aparece "reputação em construção".
+
+Teste: `docs/tests/contratacao-supabase-local.js` (35 verificações).
 
 ### Modelos de e-mail em português
 
@@ -150,11 +173,11 @@ Tudo isto vale mesmo que alguém altere o JavaScript do site, porque as regras r
 ## Testar o esquema
 
 `supabase/tests/rls_regras.sql` simula duas empresas, dois profissionais e um visitante sem conta,
-e confere as regras acima. São 113 verificações. **Rode só num projeto de teste**, porque o
+e confere as regras acima. São 115 verificações. **Rode só num projeto de teste**, porque o
 arquivo cria usuários fictícios.
 
 - No Supabase: crie um projeto de teste, aplique o esquema e rode o arquivo de testes no SQL Editor.
-  A última consulta mostra "113 / 113 passaram".
+  A última consulta mostra "115 / 115 passaram".
 - Localmente, com PostgreSQL 16, num banco vazio:
   ```
   psql -d kor -f supabase/tests/supabase_local_stub.sql   # imita os esquemas auth e storage do Supabase

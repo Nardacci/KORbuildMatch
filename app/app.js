@@ -818,13 +818,20 @@
             });
 
         return dados.then(function (x) {
-          return minhasConversas(conta).then(function (cvs) { x.cvs = cvs; return x; });
+          return Promise.all([minhasConversas(conta), minhasContratacoes(conta), carregarReputacao(empresa ? 'empresa' : 'profissional', empresa ? d.id : conta.user.id)])
+            .then(function (rs) { x.cvs = rs[0]; x.ks = rs[1].ks; x.avs = rs[1].avs; x.rep = rs[2].rep; return x; });
         }).then(function (x) {
           var stats, principal, resumo;
           var lado = empresa ? 'empresa' : 'profissional';
           var semResp = x.cvs.filter(function (cv) { return semResposta(cv, lado); });
           var linhaMsgs = semResp.length ? linha('mensagens.html?filtro=sem-resposta', 'message', plural(semResp.length, 'mensagem sem resposta', 'mensagens sem resposta'),
             semResp.map(function (cv) { return nomeDoOutro(cv, lado); }).slice(0, 3).join(', ') + (semResp.length > 3 ? '…' : ''), 'msgs-sem-resposta', 'amber') : '';
+          // Contratações que pedem algo (confirmar, contestação, recusa, avaliar).
+          var linhasContr = x.ks.filter(function (k) { return situacao(k, lado, x.avs).pend; }).map(function (k) {
+            var st = situacao(k, lado, x.avs);
+            var nome = empresa ? (k.profissionais && k.profissionais.nome) : (k.empresas && k.empresas.nome);
+            return linha('contratacoes.html', st.acao === 'avaliar' ? 'star' : 'check', st.rotulo, (nome || '') + ' · ' + k.funcao, 'contr-' + k.id, st.acao === 'avaliar' ? 'amber' : '');
+          }).join('');
           if (empresa) {
             var abertas = x.vagas.filter(function (v) { return v.status === 'aberta'; });
             var novos = x.cands.filter(function (c) { return c.status === 'novo'; });
@@ -836,6 +843,7 @@
             resumo = !publicouAlguma ? 'Tudo pronto para publicar a primeira vaga.'
               : (novos.length ? 'Você tem ' + plural(novos.length, 'candidato novo', 'candidatos novos') + ' para responder.' : 'Tudo em dia com os candidatos.');
             var pend = [];
+            if (linhasContr) pend.push(linhasContr);
             if (linhaMsgs) pend.push(linhaMsgs);
             if (atrasados.length) pend.push(linha('candidatos.html?status=novo', 'clock', plural(atrasados.length, 'candidato esperando', 'candidatos esperando') + ' há mais de ' + D.prazoRespostaDias + ' dias',
               'Chame para conversa ou marque como não selecionado. A resposta garantida conta na sua reputação.', 'atrasados', 'amber'));
@@ -871,7 +879,7 @@
             resumo = novasParaMim.length ? plural(novasParaMim.length, 'vaga combina', 'vagas combinam') + ' com você perto de ' + (d.cidade || 'você') + '.' : 'Seu perfil está completo e visível para as empresas.';
             principal =
               '<a href="buscar.html" class="row-link search-c" id="busca"><span>' + icon('search', 20, { stroke: 2 }) + '</span>Buscar vagas, cargos ou empresas</a>' +
-              (linhaMsgs ? '<section class="section" aria-labelledby="h-atencao-p"><h2 id="h-atencao-p">Precisa da sua atenção</h2>' + linhaMsgs + '</section>' : '') +
+              (linhaMsgs || linhasContr ? '<section class="section" aria-labelledby="h-atencao-p"><h2 id="h-atencao-p">Precisa da sua atenção</h2>' + linhasContr + linhaMsgs + '</section>' : '') +
               '<section class="section" aria-labelledby="h-vagas"><div class="section-head"><h2 id="h-vagas">Vagas para você</h2>' + (perto.length ? '<a href="buscar.html">Ver todas</a>' : '') + '</div>' +
                 (perto.length ? perto.slice(0, 3).map(function (v) { return cartaoVaga(v, d, minhas); }).join('')
                   : '<div class="empty" id="sem-vagas"><p class="row-title">Ainda não há vagas perto de você</p>' +
@@ -886,8 +894,12 @@
             '<section class="hero-c" aria-label="Resumo">' +
               '<div class="greeting"><h1 id="ola">Olá, ' + esc(primeiro) + '!</h1><p id="resumo-topo">' +
                 (completo ? resumo : (empresa ? 'Complete o perfil da empresa para os profissionais conhecerem vocês.' : 'Complete seu perfil para aparecer nas indicações das empresas.')) + '</p></div>' +
-              '<div class="hero-score"><b class="novo">Novo</b><div><strong>★ Reputação em construção</strong>' +
-                '<span>' + (empresa ? 'Cada contratação confirmada conta aqui' : 'Cada trabalho confirmado conta aqui') + '</span></div></div>' +
+              (x.rep && !x.rep.em_construcao
+                ? '<div class="hero-score" id="hero-rep"><b>' + esc(String(x.rep.nota).replace('.', ',')) + '</b><div><strong>★ ' + (empresa ? 'Reputação verificada' : 'Sua reputação') + '</strong>' +
+                  '<span>' + (empresa ? plural(x.rep.contratacoes, 'contratação confirmada', 'contratações confirmadas') : plural(x.rep.trabalhos, 'trabalho verificado', 'trabalhos verificados')) + '</span></div></div>'
+                : '<div class="hero-score" id="hero-rep"><b class="novo">Novo</b><div><strong>★ Reputação em construção</strong>' +
+                  '<span>' + (x.rep && (empresa ? x.rep.contratacoes : x.rep.trabalhos) ? plural(empresa ? x.rep.contratacoes : x.rep.trabalhos, empresa ? 'contratação confirmada' : 'trabalho verificado', empresa ? 'contratações confirmadas' : 'trabalhos verificados') + ' · a nota aparece com 3 avaliações'
+                    : (empresa ? 'Cada contratação confirmada conta aqui' : 'Cada trabalho confirmado conta aqui')) + '</span></div></div>') +
               '<div class="hero-stats">' + stats.map(function (st) {
                 return '<div class="hero-stat"><b' + (st.id ? ' id="' + st.id + '"' : '') + '>' + esc(st.v) + '</b><span>' + esc(st.r) + '</span></div>';
               }).join('') + '</div></section>';
@@ -962,6 +974,10 @@
             '<p class="form-status" id="form-status" role="alert"></p>' +
             '<button type="submit" class="btn btn-primary btn-lg" id="salvar">Salvar perfil</button>' +
           '</form>' +
+          '<section class="section" id="minha-reputacao"><h2>Minha reputação</h2><div id="rep-area"><p class="row-sub">Carregando…</p></div>' +
+            '<a href="contratacoes.html" class="row-link" id="link-contratacoes"><div class="icon-tile">' + icon('briefcase') + '</div><div class="row-main"><div class="row-title">Contratações e avaliações</div>' +
+            '<div class="row-sub">Confirmar, contestar, registrar o fim do vínculo e avaliar</div></div><span class="chevron">' + icon('chevron', 20, { stroke: 2 }) + '</span></a></section>' +
+          (empresa ? '' : '<section class="section" id="exp-verificadas"><h2>Experiência verificada</h2><div id="exp-area"></div></section>') +
           '<section class="card" id="conta"><h2 class="card-title">Conta</h2><p class="row-sub">E-mail: <strong>' + esc(conta.user.email) + '</strong></p>' +
             '<form class="form" id="senha-form" novalidate>' +
               field('p-senha', 'Nova senha', 'input', 'type="password" autocomplete="new-password" minlength="8"', '', { hint: 'Pelo menos 8 caracteres.' }) +
@@ -1044,6 +1060,37 @@
 
         $('#sair').addEventListener('click', function () { ocupado(this, true, 'Saindo…'); sair(); });
 
+        function pintarReputacao() {
+          carregarReputacao(empresa ? 'empresa' : 'profissional', empresa ? d.id : conta.user.id).then(function (x) {
+            $('#rep-area').innerHTML = repHtml(x.rep, empresa ? 'empresa' : 'profissional') +
+              (x.avs.length ? '<h3 class="sub-h">Avaliações recebidas</h3>' + avaliacoesHtml(x.avs, empresa ? 'empresa' : 'profissional', true) : '');
+          }).catch(function () { $('#rep-area').innerHTML = ''; });
+        }
+        pintarReputacao();
+        ligarRespostas($('#rep-area'), pintarReputacao);
+
+        function pintarExperiencias() {
+          if (empresa) return;
+          sb.from('experiencias').select('*').eq('profissional_id', conta.user.id).not('contratacao_id', 'is', null).order('inicio', { ascending: false }).then(function (r) {
+            var xs = r.data || [];
+            $('#exp-area').innerHTML = xs.length ? '<ul class="card exp-list">' + xs.map(function (x) {
+              return '<li class="exp-item"><div class="row-title">' + esc(x.cargo) + '</div><div class="row-sub">' + esc(x.empresa_nome) +
+                (x.inicio ? ' · ' + new Date(x.inicio + 'T12:00:00').getFullYear() + ' – ' + (x.fim ? new Date(x.fim + 'T12:00:00').getFullYear() : 'atual') : '') + '</div>' +
+                '<label class="check-row"><input type="checkbox" data-exp="' + x.id + '"' + (x.mostrar_empresa !== false ? ' checked' : '') + '><span>Mostrar o nome da empresa no meu perfil</span></label></li>';
+            }).join('') + '</ul><p class="row-sub">Oculto, as empresas veem “Empresa não divulgada”, mas o trabalho continua contando na sua reputação.</p>'
+              : '<p class="row-sub">Quando uma contratação for confirmada pelos dois lados, o trabalho aparece aqui, verificado.</p>';
+          });
+        }
+        pintarExperiencias();
+        if (!empresa) $('#exp-area').addEventListener('change', function (e) {
+          var cb = e.target.closest('[data-exp]');
+          if (!cb) return;
+          sb.from('experiencias').update({ mostrar_empresa: cb.checked }).eq('id', cb.getAttribute('data-exp')).then(function (r) {
+            if (r.error) { cb.checked = !cb.checked; toast(erroComDetalhe(r.error)); return; }
+            toast(cb.checked ? 'O nome da empresa aparece no seu perfil.' : 'O nome da empresa ficou oculto.');
+          });
+        });
+
         $('#senha-form').addEventListener('submit', function (e) {
           e.preventDefault();
           var nova = $('#p-senha').value;
@@ -1068,6 +1115,12 @@
 
   function rotuloDe(lista, id) { var x = lista.filter(function (i) { return i.id === id; })[0]; return x ? x.rotulo : ''; }
   var MODELOS_ROT = { presencial: 'Presencial', hibrido: 'Híbrido', remoto: 'Remoto' };
+
+  function hojeISO() {
+    var d = new Date();
+    function dois(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + dois(d.getMonth() + 1) + '-' + dois(d.getDate());
+  }
 
   function dataBR(iso) {
     if (!iso) return '';
@@ -1504,7 +1557,8 @@
       acoes = '<div class="btn-row">' +
         '<a href="ver-profissional.html?id=' + encodeURIComponent(c.profissional_id) + '&vaga=' + encodeURIComponent(c.vaga_id) + '" class="btn btn-outline">Ver perfil</a>' +
         (c.status === 'novo' ? '<button type="button" class="btn btn-primary" data-cand="conversa" data-id="' + c.id + '">Chamar para conversa</button>' : '') +
-        (c.status === 'conversa' ? '<button type="button" class="btn btn-primary" data-msg="' + c.id + '">' + icon('message', 16, { stroke: 2 }) + 'Mensagem</button>' : '') +
+        (c.status === 'conversa' ? '<button type="button" class="btn btn-primary" data-msg="' + c.id + '">' + icon('message', 16, { stroke: 2 }) + 'Mensagem</button>' +
+          '<a href="registrar-contratacao.html?prof=' + encodeURIComponent(c.profissional_id) + '&vaga=' + encodeURIComponent(c.vaga_id) + '" class="btn btn-outline">Registrar contratação</a>' : '') +
         (c.status === 'novo' || c.status === 'conversa' ? '<button type="button" class="btn btn-outline btn-quiet" data-cand="nao" data-id="' + c.id + '">Não selecionar</button>' : '') +
         (c.status === 'nao' ? '<button type="button" class="btn btn-outline btn-quiet" data-cand="novo" data-id="' + c.id + '">Desfazer</button>' : '') +
         '</div>';
@@ -1625,13 +1679,13 @@
       return Promise.all([
         sb.from('profissionais').select('*').eq('id', id).maybeSingle(),
         sb.from('experiencias').select('*').eq('profissional_id', id).order('inicio', { ascending: false, nullsFirst: false }),
-        sb.from('reputacao_profissionais').select('*').eq('profissional_id', id).maybeSingle(),
+        carregarReputacao('profissional', id),
         vagaId ? sb.from('vagas').select('*').eq('id', vagaId).maybeSingle() : Promise.resolve({ data: null })
       ]).then(function (rs) {
         var p = rs[0].data;
         if (rs[0].error) throw rs[0].error;
         if (!p) { $('#content').innerHTML = vazio('Perfil indisponível', 'O profissional pode ter ocultado o perfil ou apagado a conta.', '<a href="candidatos.html" class="btn btn-primary">Voltar</a>'); return; }
-        var exps = rs[1].data || [], rep = rs[2].data, v = rs[3].data;
+        var exps = rs[1].data || [], rep = rs[2].rep, avsPub = rs[2].avs, v = rs[3].data;
         var km = v && v.modelo !== 'remoto' ? distanciaKm(p, v) : null;
         var verificadas = exps.filter(function (x) { return x.contratacao_id; }), declaradas = exps.filter(function (x) { return !x.contratacao_id; });
         function exp(x) {
@@ -1653,7 +1707,8 @@
           (p.sobre ? '<section class="section"><h2>Sobre</h2><p class="prose">' + esc(p.sobre) + '</p></section>' : '') +
           '<section class="section"><h2>Experiência verificada</h2>' + (verificadas.length ? '<ul class="card exp-list">' + verificadas.map(exp).join('') + '</ul>'
             : '<p class="row-sub">Ainda sem trabalhos verificados. Eles aparecem quando uma contratação é confirmada pelos dois lados.</p>') + '</section>' +
-          (declaradas.length ? '<section class="section"><h2>Experiência declarada</h2><ul class="card exp-list">' + declaradas.map(exp).join('') + '</ul></section>' : '');
+          (declaradas.length ? '<section class="section"><h2>Experiência declarada</h2><ul class="card exp-list">' + declaradas.map(exp).join('') + '</ul></section>' : '') +
+          '<section class="section" id="reputacao"><h2>Reputação</h2>' + repHtml(rep, 'profissional') + avaliacoesHtml(avsPub, 'profissional', false) + '</section>';
       });
     }).catch(function (err) { erroCarregar(err, 'candidatos.html'); });
   }
@@ -1803,7 +1858,10 @@
         '<section class="section"><h2>Sobre a empresa</h2><div class="card"><div class="row-title">' + esc(e.nome || '') + '</div>' +
           '<p class="row-sub">' + esc([e.setor, e.porte, e.cidade ? e.cidade + (e.estado ? ', ' + e.estado : '') : ''].filter(Boolean).join(' · ')) + '</p>' +
           (e.descricao ? '<p class="prose">' + esc(e.descricao) + '</p>' : '') +
-          '<div class="chips"><span class="chip blue">Empresa nova · reputação em construção</span></div></div></section>';
+          '</div><div id="rep-empresa"></div></section>';
+      carregarReputacao('empresa', v.empresa_id).then(function (x) {
+        $('#rep-empresa').innerHTML = repHtml(x.rep, 'empresa') + avaliacoesHtml(x.avs.slice(0, 3), 'empresa', false);
+      }).catch(function () { $('#rep-empresa').innerHTML = ''; });
       var b = $('#candidatar');
       if (b) b.addEventListener('click', formCandidatura);
       var d = $('#duvida');
@@ -2204,6 +2262,7 @@
     function montar() {
       $('#content').innerHTML = vagaLink() +
         '<div id="wa-area">' + barraContato() + '</div>' +
+        '<div id="deu-certo"></div>' +
         '<ul class="bubbles" id="msgs" aria-live="polite">' + bolhas() + '</ul>' +
         '<form id="msg-form" class="chat-compose"><label class="visually-hidden" for="msg-in">Mensagem</label>' +
           '<textarea id="msg-in" rows="1" maxlength="2000" placeholder="Escreva uma mensagem…"></textarea>' +
@@ -2214,6 +2273,30 @@
       if (params.get('texto') && !msgs.length) $('#msg-in').value = params.get('texto');
       rolar();
       ligar();
+      deuCerto();
+    }
+
+    // "Deu certo?" (seção 7.2): depois de liberar o contato, a conversa pergunta se houve contratação,
+    // para o vínculo não se perder quando o resto acontece fora da plataforma.
+    function deuCerto() {
+      var area = $('#deu-certo');
+      if (!area || estadoContato() !== 'liberado' || cv['deu_certo_' + lado] === 'nao') { if (area) area.innerHTML = ''; return; }
+      sb.from('contratacoes').select('id, status').eq('empresa_id', cv.empresa_id).eq('profissional_id', cv.profissional_id).then(function (r) {
+        var ks = r.data || [];
+        if (ks.some(function (k) { return k.status !== 'recusado'; })) { area.innerHTML = ''; return; }
+        var href = lado === 'empresa'
+          ? 'registrar-contratacao.html?prof=' + encodeURIComponent(cv.profissional_id) + (cv.vaga_id ? '&vaga=' + encodeURIComponent(cv.vaga_id) : '')
+          : 'registrar-contratacao.html?empresa=' + encodeURIComponent(cv.empresa_id) + (cv.vaga_id ? '&vaga=' + encodeURIComponent(cv.vaga_id) : '');
+        area.innerHTML = '<div class="card card-highlight" id="deu-certo-card"><div class="row-title">Deu certo?</div>' +
+          '<p class="row-sub">' + (lado === 'empresa' ? 'Vocês fecharam a contratação de ' + esc(nomeDoOutro(cv, lado).split(' ')[0]) + '?' : 'Você foi contratado(a) por ' + esc(nomeDoOutro(cv, lado)) + '?') +
+          ' Registre aqui para o vínculo entrar no histórico e na reputação dos dois.</p>' +
+          '<div class="btn-row"><a href="' + href + '" class="btn btn-primary">' + (lado === 'empresa' ? 'Sim, registrar contratação' : 'Sim, fui contratado(a)') + '</a>' +
+          '<button type="button" class="btn btn-outline" id="deu-certo-nao">Ainda não</button></div></div>';
+        $('#deu-certo-nao').addEventListener('click', function () {
+          var patch = {}; patch['deu_certo_' + lado] = 'nao';
+          sb.from('conversas').update(patch).eq('id', cv.id).then(function () { cv['deu_certo_' + lado] = 'nao'; area.innerHTML = ''; toast('Tudo bem. Você pode registrar a contratação depois, em Contratações.'); });
+        });
+      });
     }
 
     function rolar() { var el = $('#msgs'); if (el) el.scrollTop = el.scrollHeight; }
@@ -2230,6 +2313,7 @@
         if (rs[1].data && (rs[1].data.compartilhou_empresa !== cv.compartilhou_empresa || rs[1].data.compartilhou_profissional !== cv.compartilhou_profissional)) {
           cv.compartilhou_empresa = rs[1].data.compartilhou_empresa; cv.compartilhou_profissional = rs[1].data.compartilhou_profissional;
           $('#wa-area').innerHTML = barraContato();
+          deuCerto();
         }
       });
     }
@@ -2278,6 +2362,7 @@
             if (r.error) { ocupado(b, false); status(erroComDetalhe(r.error)); return; }
             cv['compartilhou_' + lado] = true;
             $('#wa-area').innerHTML = barraContato();
+            deuCerto();
             toast(estadoContato() === 'liberado' ? 'Contato liberado para os dois.' : 'Contato compartilhado. Ele aparece para a outra pessoa quando ela compartilhar o dela.');
           });
           return;
@@ -2330,6 +2415,433 @@
     }
   }
 
+
+  /* =====================================================================
+   * ETAPA 5 — CONTRATAÇÃO E REPUTAÇÃO
+   * ===================================================================== */
+
+  var RESPOSTAS_AV = ['Sim', 'Parcialmente', 'Não'];
+  // Perguntas objetivas (seção 8.4). "ref" mostra o combinado como referência.
+  var PERGUNTAS = {
+    empresa: [  // a empresa avalia o profissional
+      { id: 'entregou', texto: 'Entregou o trabalho combinado?', ref: 'funcao' },
+      { id: 'horarios', texto: 'Cumpriu horários e prazos?', ref: 'jornada' },
+      { id: 'comunicacao', texto: 'Comunicação clara e profissional?' },
+      { id: 'novamente', texto: 'Contrataria novamente?' }
+    ],
+    profissional: [  // o profissional avalia a empresa
+      { id: 'pagamento', texto: 'O pagamento foi feito conforme combinado?', ref: 'valor' },
+      { id: 'anuncio', texto: 'A vaga correspondia ao anúncio?', ref: 'funcao' },
+      { id: 'condicoes', texto: 'Condições e prazos foram cumpridos?', ref: 'jornada' },
+      { id: 'ambiente', texto: 'Ambiente de trabalho respeitoso?' },
+      { id: 'novamente', texto: 'Trabalharia novamente para esta empresa?' }
+    ]
+  };
+
+  var SELECT_CONTRATACAO = '*, empresas(id, nome), profissionais(id, nome), vagas(id, titulo, status, posicoes)';
+
+  function combinadoValor(k) {
+    return k.valor != null ? dinheiro(Number(k.valor), k.moeda) + ' ' + rotuloDe(D.periodos, k.periodo) : 'A combinar';
+  }
+  function combinadoHtml(k) {
+    return '<dl class="summary combinado">' +
+      '<div><dt>Função</dt><dd>' + esc(k.funcao) + '</dd></div>' +
+      (k.tipo ? '<div><dt>Contratação</dt><dd>' + esc(rotuloDe(D.tipos, k.tipo)) + '</dd></div>' : '') +
+      '<div><dt>Valor</dt><dd>' + esc(combinadoValor(k)) + '</dd></div>' +
+      (k.data_inicio ? '<div><dt>Início</dt><dd>' + dataBR(k.data_inicio) + '</dd></div>' : '') +
+      (k.jornada ? '<div><dt>Jornada</dt><dd>' + esc(k.jornada) + '</dd></div>' : '') + '</dl>';
+  }
+  function refCombinado(k, ref) {
+    if (ref === 'valor') return 'Combinado: ' + combinadoValor(k);
+    if (ref === 'funcao') return 'Combinado: ' + k.funcao;
+    if (ref === 'jornada') return k.jornada ? 'Combinado: ' + k.jornada : '';
+    return '';
+  }
+
+  function minhasContratacoes(conta) {
+    var q = sb.from('contratacoes').select(SELECT_CONTRATACAO).order('criado_em', { ascending: false });
+    q = ladoDe(conta) === 'empresa' ? q.eq('empresa_id', conta.dados.id) : q.eq('profissional_id', conta.user.id);
+    return q.then(function (r) {
+      if (r.error) throw r.error;
+      var ks = r.data || [];
+      if (!ks.length) return { ks: [], avs: [] };
+      // Volta a minha avaliação e as já publicadas (a do outro lado fica oculta até publicar).
+      return sb.from('avaliacoes').select('*').in('contratacao_id', ks.map(function (k) { return k.id; })).then(function (r2) {
+        if (r2.error) throw r2.error;
+        return { ks: ks, avs: r2.data || [] };
+      });
+    });
+  }
+
+  // O que cada contratação pede de quem está vendo (e se é uma pendência).
+  function situacao(k, lado, avs) {
+    var outro = lado === 'empresa' ? ((k.profissionais && k.profissionais.nome) || 'O profissional') : ((k.empresas && k.empresas.nome) || 'A empresa');
+    var primeiro = outro.split(' ')[0];
+    var registrei = k.registrada_por === lado;
+    var minha = avs.filter(function (a) { return a.contratacao_id === k.id && a.autor_tipo === lado; })[0];
+    var dele = avs.filter(function (a) { return a.contratacao_id === k.id && a.autor_tipo !== lado; })[0];
+    var aberta = k.avaliar_ate && new Date(k.avaliar_ate) > new Date();
+    if (k.status === 'aguardando') {
+      if (registrei) return { chip: 'amber', rotulo: 'Aguardando confirmação', texto: (k.resposta_texto ? 'Você respondeu à contestação. ' : '') + 'O vínculo só conta no histórico depois que ' + outro + ' confirmar.', pend: false };
+      return { chip: 'blue', rotulo: 'Confirme a contratação', pend: true, acao: 'confirmar',
+        texto: (k.resposta_texto ? outro + ' respondeu à sua contestação: “' + k.resposta_texto + '”. ' : '') +
+          (lado === 'profissional' ? outro + ' registrou sua contratação. Confira o combinado: ao confirmar, o trabalho entra no seu histórico verificado.'
+            : outro + ' registrou que foi contratado(a). Confira o combinado: ao confirmar, o vínculo passa a contar para os dois.') };
+    }
+    if (k.status === 'contestado') {
+      if (registrei) return { chip: 'amber', rotulo: 'Combinado contestado', pend: true, acao: 'contestado', texto: primeiro + ' contestou: “' + (k.contestacao_texto || '') + '”. Corrija o combinado ou mantenha e responda.' };
+      return { chip: 'amber', rotulo: 'Você contestou', texto: 'Sua contestação foi enviada. ' + outro + ' vai corrigir o combinado ou responder.', pend: false };
+    }
+    if (k.status === 'recusado') {
+      if (registrei) return { chip: 'grey', rotulo: 'Contratação recusada', pend: !k.recusa_contestada, acao: k.recusa_contestada ? null : 'recusado',
+        texto: k.recusa_contestada ? 'Você contestou a recusa. A moderação está analisando.' : outro + ' disse que a contratação não aconteceu. Se aconteceu, conteste: a moderação analisa.' };
+      return { chip: 'grey', rotulo: 'Você recusou', texto: 'O vínculo não entra no histórico de ninguém.' + (k.recusa_contestada ? ' ' + outro + ' contestou a recusa; a moderação está analisando.' : ''), pend: false };
+    }
+    // confirmado
+    if (!k.encerrada_em) return { chip: 'green', rotulo: 'Vínculo ativo', acao: 'ativo', pend: false,
+      texto: 'Confirmada em ' + dataBR(k.confirmada_em) + '. Quando o trabalho terminar, registre o fim do vínculo: a avaliação dos dois lados abre por ' + D.prazoRespostaDias + ' dias.' };
+    if (!minha && aberta) return { chip: 'blue', rotulo: 'Avalie ' + primeiro, pend: true, acao: 'avaliar',
+      texto: 'Vínculo encerrado em ' + dataBR(k.encerrada_em) + '. A avaliação fica aberta até ' + dataBR(k.avaliar_ate) + ' e só é publicada quando os dois avaliarem ou o prazo terminar.' };
+    if (minha && !dele && aberta) return { chip: 'green', rotulo: 'Avaliação enviada', pend: false, texto: 'Fica oculta até ' + outro + ' avaliar ou o prazo terminar, em ' + dataBR(k.avaliar_ate) + '.' };
+    return { chip: 'green', rotulo: 'Concluída', pend: false, texto: 'Vínculo encerrado em ' + dataBR(k.encerrada_em) + '.' + (minha || dele ? ' As avaliações estão publicadas.' : ' A avaliação fechou sem envios.') };
+  }
+
+  // Reputação (seção 8.6): "em construção" com menos de 3 avaliações.
+  function repHtml(rep, tipo) {
+    if (!rep || rep.em_construcao) {
+      var n = rep ? (tipo === 'empresa' ? rep.contratacoes : rep.trabalhos) : 0;
+      return '<div class="card"><div class="chips"><span class="chip blue">' + (tipo === 'empresa' ? 'Empresa nova' : 'Novo na plataforma') + ' · reputação em construção</span></div>' +
+        '<p class="row-sub">' + (n ? plural(n, tipo === 'empresa' ? 'contratação verificada' : 'trabalho verificado', tipo === 'empresa' ? 'contratações verificadas' : 'trabalhos verificados') + '. ' : '') +
+        'A nota aparece a partir de 3 avaliações de vínculos confirmados pelos dois lados.</p></div>';
+    }
+    var nota = String(rep.nota).replace('.', ',');
+    var itens = tipo === 'empresa'
+      ? [{ v: nota, r: 'nota média' }, { v: String(rep.contratacoes), r: 'contratações verificadas' }, { v: rep.pagou_conforme_pct + '%', r: 'pagou conforme combinado' }, { v: rep.trabalhariam_de_novo_pct + '%', r: 'trabalhariam de novo' }]
+      : [{ v: nota, r: 'nota média' }, { v: String(rep.trabalhos), r: 'trabalhos verificados' }, { v: rep.contratariam_de_novo_pct + '%', r: 'contratariam de novo' }];
+    return '<div class="card rep-light"><div class="rep-grid">' + itens.map(function (i) {
+      return '<div><div class="rep-value">' + esc(i.v) + '</div><div class="rep-label">' + esc(i.r) + '</div></div>';
+    }).join('') + '</div><p class="row-sub">Com base em ' + plural(rep.avaliacoes, 'avaliação', 'avaliações') + ' de vínculos confirmados pelos dois lados.</p></div>';
+  }
+
+  function estrelas(n) {
+    var s = '';
+    for (var i = 1; i <= 5; i++) s += '<span class="estrela' + (i <= n ? ' on' : '') + '">' + icon('star', 14, { stroke: 1.6 }) + '</span>';
+    return '<span class="estrelas" role="img" aria-label="Nota ' + n + ' de 5">' + s + '</span>';
+  }
+
+  // Lista de avaliações publicadas. "responder": o dono do perfil escreve a resposta.
+  function avaliacoesHtml(avs, tipoAvaliado, responder) {
+    if (!avs.length) return '<p class="row-sub">Nenhuma avaliação publicada ainda.</p>';
+    var perguntas = PERGUNTAS[tipoAvaliado === 'profissional' ? 'empresa' : 'profissional'];
+    return avs.map(function (a) {
+      return '<article class="card avaliacao" data-av="' + a.id + '"><div class="head-row"><div><div class="row-title">' + esc(a.autor_nome) + '</div>' +
+          '<div class="row-sub">' + esc(a.funcao) + ' · ' + dataBR(a.criado_em) + '</div></div>' + estrelas(a.nota) + '</div>' +
+        '<ul class="av-respostas">' + perguntas.map(function (p) {
+          var r = (a.respostas || {})[p.id];
+          return r ? '<li><span>' + esc(p.texto) + '</span><span class="chip ' + (r === 'Sim' ? 'green' : r === 'Não' ? 'red' : 'amber') + '">' + esc(r) + '</span></li>' : '';
+        }).join('') + '</ul>' +
+        (a.comentario ? '<p class="prose">“' + esc(a.comentario) + '”</p>' : '') +
+        (a.resposta ? '<div class="av-resposta"><div class="row-sub"><strong>Resposta</strong></div><p class="prose">' + esc(a.resposta) + '</p></div>'
+          : (responder ? '<form class="av-responder" data-av="' + a.id + '"><label class="visually-hidden" for="resp-' + a.id + '">Sua resposta</label>' +
+              '<textarea id="resp-' + a.id + '" rows="2" maxlength="300" placeholder="Responda publicamente (opcional, até 300 caracteres)"></textarea>' +
+              '<button type="submit" class="btn btn-outline">Publicar resposta</button></form>' : '')) +
+        '</article>';
+    }).join('');
+  }
+
+  function carregarReputacao(tipo, id) {
+    var view = tipo === 'empresa' ? 'reputacao_empresas' : 'reputacao_profissionais';
+    var col = tipo === 'empresa' ? 'empresa_id' : 'profissional_id';
+    return Promise.all([
+      sb.from(view).select('*').eq(col, id).maybeSingle(),
+      sb.from('avaliacoes_publicas').select('*').eq(col, id).eq('autor_tipo', tipo === 'empresa' ? 'profissional' : 'empresa').order('criado_em', { ascending: false })
+    ]).then(function (rs) { return { rep: rs[0].data, avs: rs[1].data || [] }; });
+  }
+
+  // Respostas às avaliações recebidas (o banco só aceita de quem foi avaliado).
+  function ligarRespostas(container, recarregar) {
+    container.addEventListener('submit', function (e) {
+      var f = e.target.closest('.av-responder');
+      if (!f) return;
+      e.preventDefault();
+      var t = f.querySelector('textarea').value.trim();
+      if (!t) { f.querySelector('textarea').focus(); return; }
+      var b = f.querySelector('button');
+      ocupado(b, true, 'Publicando…');
+      sb.from('avaliacoes').update({ resposta: t }).eq('id', f.getAttribute('data-av')).then(function (r) {
+        if (r.error) { ocupado(b, false); toast(erroComDetalhe(r.error)); return; }
+        toast('Resposta publicada.');
+        recarregar();
+      });
+    });
+  }
+
+  /* ---------- Registrar (ou corrigir) a contratação ---------- */
+
+  function renderRegistrarContratacao() {
+    var editarId = params.get('editar');
+    topo(editarId ? 'Corrigir o combinado' : 'Registrar contratação', 'contratacoes.html');
+    var conta, lado, k = null, prof = null, emp = null, vaga = null, cand = null;
+    contaDoTipo().then(function (c) {
+      if (!c) return;
+      conta = c; lado = ladoDe(c);
+      navBeta(conta.perfil.tipo, lado === 'empresa' ? 'candidatos' : 'candidaturas');
+      if (editarId) {
+        return sb.from('contratacoes').select(SELECT_CONTRATACAO).eq('id', editarId).maybeSingle().then(function (r) {
+          if (r.error) throw r.error;
+          k = r.data;
+          if (!k || k.status !== 'contestado' || k.registrada_por !== lado) { $('#content').innerHTML = vazio('Nada para corrigir', 'O combinado só pode ser corrigido por quem registrou, depois de uma contestação.', '<a href="contratacoes.html" class="btn btn-primary">Contratações</a>'); return; }
+          prof = k.profissionais; emp = k.empresas; vaga = k.vagas;
+          form();
+        });
+      }
+      var profId = lado === 'empresa' ? params.get('prof') : conta.user.id;
+      var empId = lado === 'empresa' ? conta.dados.id : params.get('empresa');
+      return Promise.all([
+        sb.from('profissionais').select('id, nome').eq('id', profId).maybeSingle(),
+        sb.from('empresas').select('id, nome').eq('id', empId).maybeSingle(),
+        params.get('vaga') ? sb.from('vagas').select('*').eq('id', params.get('vaga')).maybeSingle() : Promise.resolve({ data: null }),
+        params.get('vaga') ? sb.from('candidaturas').select('id, status').eq('vaga_id', params.get('vaga')).eq('profissional_id', profId).maybeSingle() : Promise.resolve({ data: null })
+      ]).then(function (rs) {
+        prof = rs[0].data; emp = rs[1].data; vaga = rs[2].data; cand = rs[3].data;
+        if (!prof || !emp) { $('#content').innerHTML = vazio('Não encontramos a outra parte', 'Abra o registro a partir de um candidato ou de uma conversa.', '<a href="inicio.html" class="btn btn-primary">Início</a>'); return; }
+        form();
+      });
+    }).catch(function (err) { erroCarregar(err, 'contratacoes.html'); });
+
+    function form() {
+      var base = k || {
+        funcao: vaga ? vaga.titulo : '', tipo: vaga ? vaga.tipo : null, moeda: vaga && vaga.moeda ? vaga.moeda : (D.moedaPorPais[codigoPais(conta.dados.pais)] || 'BRL'),
+        valor: vaga ? (vaga.salario_min != null ? vaga.salario_min : vaga.salario_max) : null, periodo: vaga && vaga.periodo ? vaga.periodo : 'mes'
+      };
+      var outroNome = lado === 'empresa' ? prof.nome : emp.nome;
+      var podePreencher = !k && lado === 'empresa' && vaga && (vaga.status === 'aberta' || vaga.status === 'pausada');
+      $('#content').innerHTML =
+        '<form class="form" id="contr-form" novalidate>' +
+          (k ? aviso((prof.nome.split(' ')[0]) + ' contestou: “' + (k.contestacao_texto || '') + '”. Corrija o que for preciso; ' + prof.nome.split(' ')[0] + ' recebe o pedido de confirmação de novo.', 'amber') : '') +
+          '<section class="card"><h2 class="card-title">' + esc(lado === 'empresa' ? 'Contratação de ' + outroNome : 'Contratação por ' + outroNome) + '</h2>' +
+            '<p class="row-sub">' + (lado === 'empresa' ? esc(outroNome) + ' confirma' : esc(outroNome) + ' confirma') + ' o combinado. Só depois disso o vínculo entra no histórico e na reputação dos dois, e vira a referência da avaliação.</p>' +
+            field('k-funcao', 'Função', 'input', 'type="text" maxlength="120"', '', { req: true }) +
+            field('k-tipo', 'Tipo de contratação', 'select', '', options(D.tipos, 'Selecione', base.tipo)) +
+            '<div class="grid-2">' + field('k-valor', 'Valor', 'input', 'type="number" min="0" step="0.01" inputmode="decimal"', '') +
+              field('k-moeda', 'Moeda', 'select', '', options(D.moedas, null, base.moeda)) + '</div>' +
+            field('k-periodo', 'Período', 'select', '', options(D.periodos, null, base.periodo || 'mes')) +
+            field('k-inicio', 'Data de início', 'input', 'type="date"', '', { req: true }) +
+            field('k-jornada', 'Jornada (opcional)', 'input', 'type="text" maxlength="120" placeholder="Ex.: Seg a sex, 9h às 18h"', '') +
+            (k ? field('k-resposta', 'Mensagem para ' + prof.nome.split(' ')[0] + ' (opcional)', 'textarea', 'rows="2" maxlength="500"', '') : '') +
+            (podePreencher ? '<div class="field"><label class="check-row"><input type="checkbox" id="k-preencher"' + ((vaga.posicoes || 1) === 1 ? ' checked' : '') + '>' +
+              '<span>Marcar a vaga “' + esc(vaga.titulo) + '” como preenchida (os outros candidatos em andamento são avisados)</span></label></div>' : '') +
+          '</section>' +
+          '<p class="form-status" id="form-status" role="alert"></p>' +
+          '<button type="submit" class="btn btn-primary btn-lg" id="k-salvar">' + (k ? 'Enviar combinado corrigido' : 'Registrar e pedir confirmação') + '</button></form>';
+      $('#k-funcao').value = base.funcao || '';
+      $('#k-valor').value = base.valor != null ? base.valor : '';
+      $('#k-inicio').value = base.data_inicio || hojeISO();
+      $('#k-jornada').value = base.jornada || '';
+      $('#contr-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var valor = $('#k-valor').value === '' ? null : Number($('#k-valor').value);
+        if (!check([
+          { id: 'k-funcao', ok: $('#k-funcao').value.trim().length >= 2, msg: 'Informe a função.' },
+          { id: 'k-valor', ok: valor == null || valor >= 0, msg: 'Informe um valor válido.' },
+          { id: 'k-inicio', ok: !!$('#k-inicio').value, msg: 'Informe a data de início.' }
+        ])) { status('Revise os campos destacados.'); return; }
+        var dados = { funcao: $('#k-funcao').value.trim(), tipo: $('#k-tipo').value || null, valor: valor, moeda: valor != null ? $('#k-moeda').value : null,
+          periodo: valor != null ? $('#k-periodo').value : null, data_inicio: $('#k-inicio').value, jornada: $('#k-jornada').value.trim() || null };
+        var btn = $('#k-salvar');
+        ocupado(btn, true, 'Enviando…');
+        var q;
+        if (k) {
+          dados.status = 'aguardando';
+          if ($('#k-resposta').value.trim()) dados.resposta_texto = $('#k-resposta').value.trim();
+          q = sb.from('contratacoes').update(dados).eq('id', k.id);
+        } else {
+          q = sb.from('contratacoes').insert(Object.assign(dados, { empresa_id: emp.id, profissional_id: prof.id, registrada_por: lado,
+            vaga_id: vaga ? vaga.id : null, candidatura_id: cand ? cand.id : null }));
+        }
+        q.then(function (r) {
+          if (r.error) { ocupado(btn, false); status(erroComDetalhe(r.error)); return null; }
+          return $('#k-preencher') && $('#k-preencher').checked ? sb.from('vagas').update({ status: 'preenchida' }).eq('id', vaga.id) : { error: null };
+        }).then(function (r2) {
+          if (!r2) return;
+          var nome = (lado === 'empresa' ? prof.nome : emp.nome);
+          $('#content').innerHTML = '<div class="done"><div class="icon-tile lg blue">' + icon('check', 30, { stroke: 2 }) + '</div>' +
+            '<h2 id="done-title" tabindex="-1">' + (k ? 'Combinado corrigido' : 'Contratação registrada') + '</h2>' +
+            '<p class="done-text">' + esc(nome) + ' recebe o pedido para confirmar o combinado. O vínculo entra no histórico verificado depois da confirmação.' +
+              (r2.error ? ' (A vaga não foi marcada como preenchida: ' + esc(traduzErro(r2.error)) + ')' : '') + '</p>' +
+            '<div class="btn-row done-actions"><a href="contratacoes.html" class="btn btn-primary">Ver contratações</a><a href="inicio.html" class="btn btn-outline">Início</a></div></div>';
+          window.scrollTo(0, 0); $('#done-title').focus();
+        });
+      });
+    }
+  }
+
+  /* ---------- Contratações (as duas jornadas) ---------- */
+
+  function renderContratacoes() {
+    topo('Contratações', 'inicio.html');
+    var conta, lado, ks = [], avs = [], aberto = null;
+    contaDoTipo().then(function (c) {
+      if (!c) return;
+      conta = c; lado = ladoDe(c);
+      navBeta(conta.perfil.tipo, 'perfil');
+      return carregar();
+    }).catch(function (err) { erroCarregar(err); });
+
+    function carregar() {
+      return minhasContratacoes(conta).then(function (x) { ks = x.ks; avs = x.avs; pintar(); });
+    }
+
+    function formulario(k, acao) {
+      var primeiro = (lado === 'empresa' ? (k.profissionais && k.profissionais.nome) : (k.empresas && k.empresas.nome) || '').split(' ')[0];
+      if (acao === 'contestar') return '<div class="card-warn confirmar">' + field('t-' + k.id, 'O que está diferente do combinado?', 'textarea', 'rows="3" maxlength="500"', '', { req: true, hint: 'Isso vai para ' + primeiro + ' corrigir ou responder.' }) +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" data-k="enviar-contestacao" data-id="' + k.id + '">Enviar contestação</button><button type="button" class="btn btn-outline" data-k="voltar">Voltar</button></div></div>';
+      if (acao === 'recusar') return '<div class="card-warn confirmar"><p class="row-sub">Confirmar que a contratação não aconteceu? ' + esc(primeiro) + ' é avisado(a) e o vínculo não entra no histórico de ninguém.</p>' +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" data-k="confirmar-recusa" data-id="' + k.id + '">Sim, não aconteceu</button><button type="button" class="btn btn-outline" data-k="voltar">Voltar</button></div></div>';
+      if (acao === 'responder') return '<div class="card-warn confirmar">' + field('t-' + k.id, 'Sua resposta para ' + primeiro, 'textarea', 'rows="3" maxlength="500"', '', { req: true, hint: 'O combinado fica como está e ' + primeiro + ' recebe o pedido de confirmação de novo.' }) +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" data-k="enviar-resposta" data-id="' + k.id + '">Manter e responder</button><button type="button" class="btn btn-outline" data-k="voltar">Voltar</button></div></div>';
+      if (acao === 'encerrar') return '<div class="card-warn confirmar">' + field('t-' + k.id, 'Último dia de trabalho', 'input', 'type="date" max="' + hojeISO() + '"' + (k.data_inicio ? ' min="' + k.data_inicio + '"' : ''), '', { req: true }) +
+        '<p class="row-sub">A avaliação dos dois lados abre por ' + D.prazoRespostaDias + ' dias a partir dessa data.</p>' +
+        '<div class="btn-row"><button type="button" class="btn btn-primary" data-k="enviar-fim" data-id="' + k.id + '">Registrar fim do vínculo</button><button type="button" class="btn btn-outline" data-k="voltar">Voltar</button></div></div>';
+      return '';
+    }
+
+    function cartao(k) {
+      var st = situacao(k, lado, avs);
+      var outro = lado === 'empresa' ? (k.profissionais && k.profissionais.nome) : (k.empresas && k.empresas.nome);
+      var acoes = '';
+      if (st.acao === 'confirmar') acoes = '<button type="button" class="btn btn-primary" data-k="confirmar" data-id="' + k.id + '">Confirmar</button>' +
+        '<button type="button" class="btn btn-outline" data-k="contestar" data-id="' + k.id + '">Algo está diferente</button>' +
+        '<button type="button" class="btn btn-outline btn-quiet" data-k="recusar" data-id="' + k.id + '">Não aconteceu</button>';
+      if (st.acao === 'contestado') acoes = '<a href="registrar-contratacao.html?editar=' + encodeURIComponent(k.id) + '" class="btn btn-primary">Corrigir o combinado</a>' +
+        '<button type="button" class="btn btn-outline" data-k="responder" data-id="' + k.id + '">Manter e responder</button>';
+      if (st.acao === 'recusado') acoes = '<button type="button" class="btn btn-outline" data-k="contestar-recusa" data-id="' + k.id + '">Contestar a recusa</button>';
+      if (st.acao === 'ativo') acoes = '<button type="button" class="btn btn-outline" data-k="encerrar" data-id="' + k.id + '">Registrar fim do vínculo</button>';
+      if (st.acao === 'avaliar') acoes = '<a href="avaliar.html?id=' + encodeURIComponent(k.id) + '" class="btn btn-primary">Avaliar agora</a>';
+      var form = aberto && aberto.id === k.id ? formulario(k, aberto.acao) : '';
+      return '<article class="card contr-card" data-k-id="' + k.id + '"><div class="head-row"><h3 class="row-title">' + esc(k.funcao) + '</h3><span class="chip ' + st.chip + '">' + esc(st.rotulo) + '</span></div>' +
+        '<p class="row-sub">' + esc(outro || '') + (k.vagas ? ' · vaga ' + esc(k.vagas.titulo) : '') + ' · registrada ' + (k.registrada_por === lado ? 'por você' : (lado === 'empresa' ? 'pelo profissional' : 'pela empresa')) + '</p>' +
+        combinadoHtml(k) + '<p class="row-sub">' + esc(st.texto) + '</p>' +
+        (form || (acoes ? '<div class="btn-row">' + acoes + '</div>' : '')) + '</article>';
+    }
+
+    function pintar() {
+      var pend = ks.filter(function (k) { return situacao(k, lado, avs).pend; });
+      var resto = ks.filter(function (k) { return !situacao(k, lado, avs).pend; });
+      $('#content').innerHTML =
+        (ks.length ? '' : vazio('Nenhuma contratação ainda', lado === 'empresa'
+          ? 'Quando você contratar alguém pela plataforma, registre a contratação na lista de candidatos ou na conversa. O vínculo verificado conta na reputação dos dois.'
+          : 'Quando uma empresa registrar sua contratação, você confirma aqui. Você também pode registrar pela conversa com a empresa.')) +
+        (pend.length ? '<section class="section"><h2>Precisa da sua atenção</h2>' + pend.map(cartao).join('') + '</section>' : '') +
+        (resto.length ? '<section class="section"><h2>' + (pend.length ? 'Outras' : 'Suas contratações') + '</h2>' + resto.map(cartao).join('') + '</section>' : '') +
+        '<p class="form-status" id="form-status" role="alert"></p>';
+    }
+
+    $('#content').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-k]');
+      if (!b) return;
+      var acao = b.getAttribute('data-k'), id = b.getAttribute('data-id');
+      if (['contestar', 'recusar', 'responder', 'encerrar'].indexOf(acao) !== -1) { aberto = { id: id, acao: acao }; pintar(); var f = $('#t-' + id); if (f) f.focus(); return; }
+      if (acao === 'voltar') { aberto = null; pintar(); return; }
+      var patch, msg;
+      if (acao === 'confirmar') { patch = { status: 'confirmado' }; msg = 'Contratação confirmada. O vínculo entrou no histórico verificado.'; }
+      if (acao === 'confirmar-recusa') { patch = { status: 'recusado' }; msg = 'Recusa enviada.'; }
+      if (acao === 'contestar-recusa') { patch = { recusa_contestada: true }; msg = 'Recusa contestada. A moderação vai analisar.'; }
+      if (acao === 'enviar-contestacao' || acao === 'enviar-resposta' || acao === 'enviar-fim') {
+        var t = $('#t-' + id).value.trim();
+        if (!check([{ id: 't-' + id, ok: !!t, msg: acao === 'enviar-fim' ? 'Informe a data.' : 'Escreva a mensagem.' }])) return;
+        if (acao === 'enviar-contestacao') { patch = { status: 'contestado', contestacao_texto: t }; msg = 'Contestação enviada.'; }
+        if (acao === 'enviar-resposta') { patch = { status: 'aguardando', resposta_texto: t }; msg = 'Resposta enviada. O pedido de confirmação foi reenviado.'; }
+        if (acao === 'enviar-fim') { patch = { encerrada_em: t }; msg = 'Fim do vínculo registrado. A avaliação está aberta.'; }
+      }
+      if (!patch) return;
+      ocupado(b, true, 'Enviando…');
+      sb.from('contratacoes').update(patch).eq('id', id).then(function (r) {
+        if (r.error) { ocupado(b, false); status(erroComDetalhe(r.error)); return; }
+        aberto = null;
+        toast(msg);
+        carregar();
+      });
+    });
+  }
+
+  /* ---------- Avaliar (avaliação cega) ---------- */
+
+  function renderAvaliar() {
+    var id = params.get('id');
+    topo('Avaliar', 'contratacoes.html');
+    var conta, lado, k;
+    contaDoTipo().then(function (c) {
+      if (!c) return;
+      conta = c; lado = ladoDe(c);
+      navBeta(conta.perfil.tipo, 'perfil');
+      return Promise.all([
+        sb.from('contratacoes').select(SELECT_CONTRATACAO).eq('id', id).maybeSingle(),
+        sb.from('avaliacoes').select('id, autor_tipo').eq('contratacao_id', id)
+      ]).then(function (rs) {
+        if (rs[0].error) throw rs[0].error;
+        k = rs[0].data;
+        var ja = (rs[1].data || []).some(function (a) { return a.autor_tipo === lado; });
+        if (!k) { $('#content').innerHTML = vazio('Contratação não encontrada', '', '<a href="contratacoes.html" class="btn btn-primary">Contratações</a>'); return; }
+        if (ja) { $('#content').innerHTML = vazio('Avaliação já enviada', 'Ela fica oculta até a outra parte avaliar ou o prazo terminar.', '<a href="contratacoes.html" class="btn btn-primary">Contratações</a>'); return; }
+        if (k.status !== 'confirmado' || !k.avaliar_ate || new Date(k.avaliar_ate) < new Date()) {
+          $('#content').innerHTML = vazio('Avaliação fechada', 'A avaliação abre quando o fim do vínculo é registrado e fica aberta por ' + D.prazoRespostaDias + ' dias.', '<a href="contratacoes.html" class="btn btn-primary">Contratações</a>');
+          return;
+        }
+        form();
+      });
+    }).catch(function (err) { erroCarregar(err, 'contratacoes.html'); });
+
+    function form() {
+      var outro = lado === 'empresa' ? k.profissionais.nome : k.empresas.nome;
+      var perguntas = PERGUNTAS[lado];
+      $('#content').innerHTML =
+        '<form class="form" id="av-form" novalidate>' +
+          '<section class="card"><h2 class="card-title">Como foi trabalhar com ' + esc(outro) + '?</h2>' +
+            '<p class="row-sub">' + esc(k.funcao) + ' · ' + (k.data_inicio ? dataBR(k.data_inicio) + ' a ' : '') + dataBR(k.encerrada_em) + '</p>' +
+            aviso('Avaliação cega: ' + outro.split(' ')[0] + ' não vê a sua antes de enviar a dele(a), e você também não. As duas são publicadas juntas, ou quando o prazo terminar em ' + dataBR(k.avaliar_ate) + '.') +
+          '</section>' +
+          '<section class="card"><h2 class="card-title">Perguntas objetivas</h2>' +
+            perguntas.map(function (p) {
+              var ref = refCombinado(k, p.ref);
+              return group('q-' + p.id, p.texto, (ref ? '<p class="row-sub av-ref">' + esc(ref) + '</p>' : '') +
+                pills('q-' + p.id, RESPOSTAS_AV.map(function (r) { return { id: r, rotulo: r }; })), { req: true });
+            }).join('') +
+          '</section>' +
+          '<section class="card"><h2 class="card-title">Nota geral</h2>' +
+            group('q-nota', 'De 1 a 5', '<div class="stars">' + [1, 2, 3, 4, 5].map(function (n) {
+              return '<label class="star"><input type="radio" name="q-nota" value="' + n + '" class="pill-input"><span class="star-ico">' + icon('star', 34, { stroke: 1.6 }) + '</span><span class="visually-hidden">' + n + '</span></label>';
+            }).join('') + '</div>', { req: true }) +
+            field('q-coment', 'Comentário (opcional)', 'textarea', 'rows="3" maxlength="300"', '', { hint: 'Até 300 caracteres. Sem ofensas nem dados pessoais: avaliações assim podem ser removidas pela moderação.' }) +
+          '</section>' +
+          '<p class="form-status" id="form-status" role="alert"></p>' +
+          '<button type="submit" class="btn btn-primary btn-lg" id="av-enviar">Enviar avaliação</button></form>';
+      $('#av-form').addEventListener('change', function (e) {
+        if (e.target.name === 'q-nota') $all('.star').forEach(function (s) { s.classList.toggle('on', Number(s.querySelector('input').value) <= Number(e.target.value)); });
+      });
+      $('#av-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var respostas = {}, regras = perguntas.map(function (p) {
+          var r = marcados('q-' + p.id)[0]; if (r) respostas[p.id] = r;
+          return { id: 'q-' + p.id, ok: !!r, msg: 'Responda esta pergunta.' };
+        });
+        var nota = Number(marcados('q-nota')[0] || 0);
+        regras.push({ id: 'q-nota', ok: nota >= 1, msg: 'Escolha a nota.' });
+        if (!check(regras)) { status('Responda todas as perguntas.'); return; }
+        var btn = $('#av-enviar');
+        ocupado(btn, true, 'Enviando…');
+        sb.from('avaliacoes').insert({ contratacao_id: k.id, autor_tipo: lado, respostas: respostas, nota: nota, comentario: $('#q-coment').value.trim() || null }).then(function (r) {
+          if (r.error) { ocupado(btn, false); status(erroComDetalhe(r.error)); return; }
+          $('#content').innerHTML = '<div class="done"><div class="icon-tile lg blue">' + icon('check', 30, { stroke: 2 }) + '</div>' +
+            '<h2 id="done-title" tabindex="-1">Avaliação enviada</h2>' +
+            '<p class="done-text">Ela fica oculta até ' + esc(outro) + ' avaliar ou o prazo terminar, em ' + dataBR(k.avaliar_ate) + '. Depois disso, as duas são publicadas juntas.</p>' +
+            '<div class="btn-row done-actions"><a href="contratacoes.html" class="btn btn-primary">Contratações</a><a href="inicio.html" class="btn btn-outline">Início</a></div></div>';
+          window.scrollTo(0, 0); $('#done-title').focus();
+        });
+      });
+    }
+  }
+
   var PAGES = {
     entrar: renderEntrar,
     cadastro: renderCadastro,
@@ -2345,7 +2857,10 @@
     vaga: renderVaga,
     candidaturas: renderCandidaturas,
     mensagens: renderMensagens,
-    conversa: renderConversa
+    conversa: renderConversa,
+    'registrar-contratacao': renderRegistrarContratacao,
+    contratacoes: renderContratacoes,
+    avaliar: renderAvaliar
   };
 
   var page = document.body.dataset.page;

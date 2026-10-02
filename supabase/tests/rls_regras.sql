@@ -253,6 +253,7 @@ reset role;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', false);
 set role authenticated;
 select public.confere('avaliação cega: o avaliado não vê antes de enviar a dele', $q$ select count(*) = 0 from avaliacoes $q$);
+select public.confere('avaliação cega: a visão pública também esconde enquanto falta um lado', $q$ select count(*) = 0 from avaliacoes_publicas $q$);
 select public.confere('reputação: ainda não conta a avaliação escondida',
   $q$ select avaliacoes = 0 and trabalhos = 1 from reputacao_profissionais where profissional_id = auth.uid() $q$);
 select public.teste('avaliação: profissional avalia a empresa',
@@ -271,6 +272,8 @@ select public.teste('denúncia: profissional denuncia uma vaga',
 reset role;
 set role anon;
 select public.confere('visitante: vê avaliações publicadas', $q$ select count(*) = 2 from avaliacoes $q$);
+select public.confere('visitante: visão pública com autor resumido e empresa oculta a pedido do profissional',
+  $q$ select bool_and(case autor_tipo when 'profissional' then autor_nome = 'João S.' else autor_nome = 'Empresa não divulgada' end) and count(*) = 2 from avaliacoes_publicas $q$);
 
 -- ----------------------------------------------------------------- CONVERSAS E PERFIL OCULTO (etapa 4)
 reset role;
