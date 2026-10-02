@@ -184,6 +184,10 @@ create trigger avaliacoes_notificar after insert on public.avaliacoes
 
 -- Avisos novos chegam na hora pelo Realtime (sino).
 do $$ begin
-  alter publication supabase_realtime add table public.notificacoes;
-exception when duplicate_object then null;
+  if to_regclass('public.notificacoes') is not null
+     and not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notificacoes') then
+    alter publication supabase_realtime add table public.notificacoes;
+  end if;
+exception when others then
+  raise notice 'Tempo real dos avisos não ativado (%). O sino continua funcionando ao abrir as telas.', sqlerrm;
 end $$;
