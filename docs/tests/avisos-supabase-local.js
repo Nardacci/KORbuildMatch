@@ -59,7 +59,7 @@ const B = 'http://localhost:8765/app/';
   await pe.reload(); await pe.waitForSelector('#plano-situacao');
   L(/Período grátis · (9[0-2]|8[89]) dias restantes/.test(await te('#plano-situacao')) && /1 de 3/.test(await te('#uso-vagas')), 'plano: período grátis começou com a vaga: ' + await te('#plano-situacao h2'));
   L(!(await hs(pe)) && await btnsOk(pe), 'plano: layout');
-  L(await pe.$eval('#assinar', b => b.disabled) && /Em definição/.test(await te('#plano-preco')), 'plano: sem preço definido, assinar fica desligado (assinatura: plano-emails-supabase-local.js)');
+  L(/US\$\s?79/.test(await te('#plano-preco')) && /Cobrado em reais/.test(await te('#plano-reais')), 'plano: Essencial em dólar, cobrado em reais (assinatura: plano-emails-supabase-local.js)');
 
   // Candidatura → aviso para a empresa
   await sql("insert into candidaturas (vaga_id, profissional_id, mensagem) values ($1, $2, 'Tenho experiência.')", [vaga.id, joao.id]);

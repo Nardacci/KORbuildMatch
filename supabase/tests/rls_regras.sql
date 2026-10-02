@@ -354,7 +354,7 @@ select public.teste('e-mails: a tela não lê a fila de e-mails', $q$ select * f
 select public.teste('e-mails: a tela não marca e-mails como enviados', $q$ select public.marcar_avisos_enviados(array[1::bigint]) $q$, true);
 reset role;
 set role anon;
-select public.confere('planos: o preço do Essencial é público (definido no painel)', $q$ select count(*) = 1 and bool_and(moeda = 'BRL') from planos where id = 'essencial' $q$);
+select public.confere('planos: o preço do Essencial é público, em dólar (definido no painel)', $q$ select count(*) = 1 and bool_and(moeda = 'USD' and preco = 79) from planos where id = 'essencial' $q$);
 
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
@@ -388,6 +388,20 @@ select public.confere('e-mails: marcar como enviados',
   $q$ select public.marcar_avisos_enviados(array(select (a ->> 'id')::bigint from public.avisos_pendentes_email(50, 0) f, jsonb_array_elements(f.avisos) a)) > 0 $q$);
 select public.confere('e-mails: enviados saem da fila', $q$ select not exists (select 1 from public.avisos_pendentes_email(50, 0)) $q$);
 reset role;
+
+-- ----------------------------------------------------------------- COTAÇÃO DO DÓLAR (preço em US$, cobrado em reais)
+insert into cotacoes (par, taxa, data) values ('USD/BRL', 5.4721, '2026-10-01') on conflict do nothing;
+set role anon;
+select public.confere('cotação: pública para mostrar o valor em reais', $q$ select count(*) = 1 from cotacoes where par = 'USD/BRL' $q$);
+reset role;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a1', false);
+set role authenticated;
+select public.teste('cotação: a tela não grava cotação', $q$ insert into cotacoes (par, taxa, data) values ('USD/BRL', 1, '2026-10-02') $q$, true);
+select public.confere('cotação: a tela não altera cotação', $q$ with u as (update cotacoes set taxa = 1 returning 1) select count(*) = 0 from u $q$);
+select public.confere('cotação: empresa não muda o valor cobrado da própria assinatura',
+  $q$ with u as (update assinaturas set valor_cobrado = 1 where empresa_id in (select id from empresas where dono = auth.uid()) returning 1) select count(*) = 0 from u $q$);
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
 
 -- ----------------------------------------------------------------- RESUMO
 \set QUIET off

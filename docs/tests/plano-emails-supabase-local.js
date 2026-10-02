@@ -22,13 +22,21 @@ const DENO = process.env.DENO_BIN || 'deno';
 const PORTA_API = 3002, PORTA_MP = 3003, PORTA_SMTP = 2525, PORTA_FUNCAO = 8000;
 const SEGREDO_MP = 's3gredo-webhook', SEGREDO_CRON = 'cron-local-123';
 
-// ---------- Mercado Pago simulado ----------
+// ---------- Mercado Pago e Banco Central (PTAX) simulados ----------
 const mp = { pedidos: [], status: 'pending', criado: null };
+const ptax = { taxa: 5.4721, pedidos: 0 };
 const servidorMp = http.createServer((req, res) => {
   let corpo = '';
   req.on('data', c => { corpo += c; });
   req.on('end', () => {
     const dados = corpo ? JSON.parse(corpo) : null;
+    if (req.url.startsWith('/ptax/CotacaoDolarPeriodo')) {
+      ptax.pedidos++;
+      res.setHeader('content-type', 'application/json');
+      return res.end(JSON.stringify({ value: [
+        { cotacaoCompra: 5.30, cotacaoVenda: 5.3012, dataHoraCotacao: '2026-09-30 13:05:11.1' },
+        { cotacaoCompra: ptax.taxa, cotacaoVenda: ptax.taxa, dataHoraCotacao: '2026-10-01 13:04:02.5' }] }));
+    }
     mp.pedidos.push({ metodo: req.method, url: req.url, auth: req.headers.authorization, corpo: dados });
     res.setHeader('content-type', 'application/json');
     if (req.method === 'POST' && req.url === '/preapproval') {
@@ -36,7 +44,8 @@ const servidorMp = http.createServer((req, res) => {
       res.writeHead(201); return res.end(JSON.stringify({ id: 'pre_1', status: 'pending', init_point: 'http://localhost:8765/app/plano.html?assinatura=retorno' }));
     }
     if (req.url === '/preapproval/pre_1') {
-      if (req.method === 'PUT') mp.status = dados.status;
+      if (req.method === 'PUT' && dados.status) mp.status = dados.status;
+      if (req.method === 'PUT' && dados.auto_recurring) Object.assign(mp.criado.auto_recurring, dados.auto_recurring);
       return res.end(JSON.stringify({ id: 'pre_1', status: mp.status, external_reference: mp.criado && mp.criado.external_reference,
         next_payment_date: mp.status === 'authorized' ? mp.criado.auto_recurring.start_date : null }));
     }
@@ -96,24 +105,31 @@ function assinarWebhook(dataId, requestId) {
   await sql(`insert into vagas (empresa_id, titulo, tipo, status, modelo) values ($1, 'Suporte ao cliente', 'integral', 'aberta', 'remoto')`, [emp.id]);
   const gratisAte = (await sql('select gratis_ate from assinaturas'))[0].gratis_ate;
 
-  let fn = await funcao('assinatura', { MP_API_URL: 'http://localhost:' + PORTA_MP, MP_ACCESS_TOKEN: 'TEST-TOKEN', MP_WEBHOOK_SECRET: SEGREDO_MP });
+  let fn = await funcao('assinatura', { MP_API_URL: 'http://localhost:' + PORTA_MP, MP_ACCESS_TOKEN: 'TEST-TOKEN', MP_WEBHOOK_SECRET: SEGREDO_MP,
+    CRON_SECRET: SEGREDO_CRON, PTAX_API_URL: 'http://localhost:' + PORTA_MP + '/ptax' });
 
-  // Sem preço definido
+  // Preço em dólar (US$ 79, da migração), cobrado em reais
   await pe.goto(B + 'plano.html'); await pe.waitForSelector('#plano-acao');
+  L(/US\$\s?79/.test(await te('#plano-preco')) && /Cobrado em reais, pela cotação do dólar do dia/.test(await te('#plano-reais')) && !(await pe.isDisabled('#assinar')) &&
+    /primeira cobrança só acontece no fim do período grátis/.test(await te('#plano-acao')), 'plano: preço em dólar, cobrado em reais pela cotação do dia');
+  await sql("update planos set preco = null where id = 'essencial'");
+  await pe.reload(); await pe.waitForSelector('#plano-acao');
   L(/Em definição/.test(await te('#plano-preco')) && await pe.isDisabled('#assinar'), 'plano: sem preço, assinar fica desligado');
-  await sql("update planos set preco = 149.90 where id = 'essencial'");
+  await sql("update planos set preco = 79 where id = 'essencial'");
   await pe.reload(); await pe.waitForSelector('#assinar:not([disabled])');
-  L(/R\$ 149,90/.test(await te('#plano-preco')) && /primeira cobrança só acontece no fim do período grátis/.test(await te('#plano-acao')), 'plano: preço do banco e primeira cobrança no fim do grátis');
 
   // Assinar → Mercado Pago → volta
   await pe.click('#assinar'); await pe.waitForURL(/assinatura=retorno/); await pe.waitForSelector('#plano-situacao');
   L(/Recebemos o retorno do Mercado Pago/.test(await te('#content')), 'assinar: volta do checkout com aviso de confirmação');
   const pedido = mp.pedidos.find(p => p.metodo === 'POST');
   L(pedido && pedido.auth === 'Bearer TEST-TOKEN' && pedido.corpo.external_reference === emp.id && pedido.corpo.payer_email === 'rh@aurora.com.br' &&
-    pedido.corpo.auto_recurring.transaction_amount === 149.9 && pedido.corpo.auto_recurring.currency_id === 'BRL' &&
-    new Date(pedido.corpo.auto_recurring.start_date).getTime() === new Date(gratisAte).getTime(), 'assinar: pedido certo ao Mercado Pago (empresa, e-mail, R$ 149,90, início no fim do grátis)');
+    pedido.corpo.auto_recurring.transaction_amount === 432.3 && pedido.corpo.auto_recurring.currency_id === 'BRL' &&
+    new Date(pedido.corpo.auto_recurring.start_date).getTime() === new Date(gratisAte).getTime(), 'assinar: pedido certo ao Mercado Pago (empresa, e-mail, US$ 79 × 5,4721 = R$ 432,30, início no fim do grátis)');
   let a = (await sql('select * from assinaturas'))[0];
-  L(a.mp_preapproval_id === 'pre_1' && a.mp_status === 'pending' && a.status === 'gratis', 'assinar: assinatura pendente registrada');
+  L(a.mp_preapproval_id === 'pre_1' && a.mp_status === 'pending' && a.status === 'gratis' && Number(a.valor_cobrado) === 432.3 && Number(a.cotacao_usada) === 5.4721,
+    'assinar: assinatura pendente registrada com o valor em reais e a cotação');
+  const cot = await sql("select par, taxa::float8 taxa, to_char(data, 'YYYY-MM-DD') data from cotacoes");
+  L(cot.length === 1 && cot[0].par === 'USD/BRL' && cot[0].taxa === 5.4721 && cot[0].data === '2026-10-01' && ptax.pedidos === 1, 'cotação: buscada no Banco Central e guardada');
 
   // Webhook do Mercado Pago
   let r = await fetch('http://localhost:' + PORTA_FUNCAO + '/assinatura/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'x-signature': 'ts=1,v1=errado', 'x-request-id': 'req-1' },
@@ -129,6 +145,22 @@ function assinarWebhook(dataId, requestId) {
   L((await sql("select count(*)::int n from notificacoes where categoria = 'plano' and titulo = 'Plano Essencial ativo'"))[0].n === 1, 'webhook: empresa avisada do plano ativo');
   await pe.waitForSelector('#cancelar', { timeout: 12000 });
   L(/Assinatura confirmada/.test(await te('#content')) && /Plano Essencial ativo/.test(await te('#plano-situacao')) && /Próxima cobrança/.test(await te('#plano-acao')), 'plano: a tela confirma sozinha depois do retorno');
+  L(/cerca de R\$\s?432,30, pela cotação do dólar do dia/.test(await te('#proxima-cobranca')) &&
+    /≈ R\$\s?432,30 hoje · dólar a R\$ 5,4721 \(PTAX de 01\/10\/2026\)/.test(await te('#plano-reais')), 'plano: valor em reais de hoje e da próxima cobrança');
+
+  // Rotina diária da cotação: reajusta quem é cobrado nos próximos dias
+  ptax.taxa = 5.6;
+  await sql("update assinaturas set proximo_pagamento = now() + interval '1 day'");
+  r = await fetch('http://localhost:' + PORTA_FUNCAO + '/assinatura/cotacao', { method: 'POST' });
+  L(r.status === 401, 'cotação: rotina sem o segredo é recusada');
+  r = await fetch('http://localhost:' + PORTA_FUNCAO + '/assinatura/cotacao', { method: 'POST', headers: { 'x-cron-secret': SEGREDO_CRON } });
+  const rot = await r.json();
+  a = (await sql('select * from assinaturas'))[0];
+  L(r.status === 200 && rot.reajustadas === 1 && mp.criado.auto_recurring.transaction_amount === 442.4 && Number(a.valor_cobrado) === 442.4 && Number(a.cotacao_usada) === 5.6,
+    'cotação: valor da assinatura atualizado no Mercado Pago antes da cobrança (R$ 442,40): ' + JSON.stringify(rot));
+  r = await fetch('http://localhost:' + PORTA_FUNCAO + '/assinatura/cotacao', { method: 'POST', headers: { 'x-cron-secret': SEGREDO_CRON } });
+  L((await r.json()).reajustadas === 0, 'cotação: sem mudança, não mexe de novo');
+  await pe.reload(); await pe.waitForSelector('#cancelar');
 
   // Profissional não assina
   r = await fetch('http://localhost:' + PORTA_FUNCAO + '/assinatura', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ acao: 'assinar' }) });

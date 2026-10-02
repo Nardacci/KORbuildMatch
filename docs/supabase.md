@@ -135,14 +135,17 @@ Edge Functions → Secrets: nunca no site nem no GitHub.
 
 **1. Banco.** No SQL Editor, aplique
 [`supabase/migrations/20261006000000_lembretes_cobranca.sql`](../supabase/migrations/20261006000000_lembretes_cobranca.sql)
-(pode rodar mais de uma vez). Ele cria:
+e depois
+[`supabase/migrations/20261007000000_cotacao_dolar.sql`](../supabase/migrations/20261007000000_cotacao_dolar.sql)
+(os dois podem rodar mais de uma vez; numa consulta nova, com nada selecionado). Eles criam:
 
 | O quê | Para quê |
 | --- | --- |
 | `lembretes_diarios()` | Uma vez por dia: avisa a empresa (e o profissional) sobre candidatos "novos" há mais de 7 dias; avisa quem ainda não avaliou quando faltam 2 dias; avisa a empresa com 7 dias, 1 dia e no dia em que o período grátis termina. Cada lembrete sai uma vez só. |
 | `avisos_pendentes_email()` · `marcar_avisos_enviados()` | A fila dos e-mails: avisos não lidos no app há mais de 3 minutos, agrupados por pessoa, respeitando "Por e-mail" nas preferências. |
-| Tabela `planos` | O preço do Essencial. **Defina em Table Editor → `planos` → linha `essencial` → coluna `preco`** (em reais, ex.: `149.90`). Enquanto estiver vazio, a tela mostra "Em definição" e o botão de assinar fica desligado. |
-| Colunas `mp_preapproval_id`, `mp_status`, `proximo_pagamento` em `assinaturas` | Situação da assinatura no Mercado Pago (só o servidor altera). |
+| Tabela `planos` | O preço do Essencial **em dólar**: começa em US$ 79 (`moeda` = `USD`). Para mudar: Table Editor → `planos` → linha `essencial` → coluna `preco`. Vazio, a tela mostra "Em definição" e o botão de assinar fica desligado. |
+| Tabela `cotacoes` | Cotação de venda PTAX do dólar (Banco Central), uma por dia. Mesmo modelo do KORbuild: o Mercado Pago cobra em reais o preço em dólar convertido pela cotação do dia. |
+| Colunas `mp_preapproval_id`, `mp_status`, `proximo_pagamento`, `valor_cobrado`, `cotacao_usada`, `cotacao_data` em `assinaturas` | Situação da assinatura no Mercado Pago e o valor em reais combinado com ele (só o servidor altera). |
 
 **2. E-mail da Hostinger para tudo.** Em **Authentication → Emails → SMTP Settings**, ligue
 "Enable custom SMTP": host `smtp.hostinger.com`, porta `465`, usuário `no-reply@getkolbuild.com`,
@@ -159,7 +162,7 @@ cadastro e de senha também saem pela Hostinger (e sem o limite de envio do Supa
 | `SMTP_PASS` | a senha da caixa na Hostinger |
 | `EMAIL_FROM` | `KORbuild Match <no-reply@getkolbuild.com>` |
 | `SITE_URL` | `https://korbuildmatch.com` |
-| `CRON_SECRET` | uma senha longa inventada por você (usada no passo 6) |
+| `CRON_SECRET` | uma senha longa inventada por você (usada no passo 6; as duas funções usam) |
 | `MP_ACCESS_TOKEN` | Mercado Pago → Suas integrações → a aplicação → Credenciais de produção → Access Token |
 | `MP_WEBHOOK_SECRET` | a "assinatura secreta" gerada no passo 5 |
 
@@ -185,15 +188,21 @@ assinaturas** (subscription_preapproval). Salve e copie a **assinatura secreta**
 **6. Agendamentos.** Abra [`supabase/agendamentos.sql`](../supabase/agendamentos.sql), troque
 `COLE_AQUI_O_CRON_SECRET` pelo mesmo valor do segredo `CRON_SECRET` e rode no SQL Editor (sem salvar o
 arquivo com o segredo). Ele liga `pg_cron` e `pg_net` e agenda os lembretes (todo dia, 9h de Brasília)
-e os e-mails (a cada 10 minutos).
+os e-mails (a cada 10 minutos) e a cotação do dólar (todo dia, 14h10 de Brasília, depois de o Banco Central
+publicar a PTAX do dia).
 
-Como fica para a empresa, em `plano.html`: preço do Essencial em reais → **Assinar** leva ao checkout do
-Mercado Pago → na volta, a tela espera a confirmação → plano ativo com a data da próxima cobrança e
+**Dólar → real.** Ao assinar, a função usa a cotação PTAX do dia (se ainda não houver uma recente guardada, busca
+na hora no Banco Central) e cria a assinatura no Mercado Pago em reais. Como o Mercado Pago repete todo mês o mesmo
+valor, a rotina diária da cotação atualiza o valor das assinaturas que têm cobrança nos próximos 3 dias: cada mês
+é cobrado pela cotação da véspera da cobrança.
+
+Como fica para a empresa, em `plano.html`: preço em dólar e quanto dá em reais hoje (com a cotação usada) → **Assinar** leva ao checkout do
+Mercado Pago → na volta, a tela espera a confirmação → plano ativo com a data e o valor aproximado da próxima cobrança e
 **Cancelar assinatura**. Quem assina ainda no período grátis só começa a pagar quando ele termina.
 Cancelando, a empresa volta ao grátis se ainda houver dias, ou ao plano encerrado (as vagas não são apagadas).
 
-Testes: `docs/tests/plano-emails-supabase-local.js` (19 verificações, com as funções reais no Deno, um
-Mercado Pago e um servidor de e-mail falsos) e `supabase/functions/testes_unitarios.test.ts`
+Testes: `docs/tests/plano-emails-supabase-local.js` (24 verificações, com as funções reais no Deno, um
+Mercado Pago, um Banco Central e um servidor de e-mail falsos) e `supabase/functions/testes_unitarios.test.ts`
 (`deno test supabase/functions/testes_unitarios.test.ts`).
 
 ### Modelos de e-mail em português
