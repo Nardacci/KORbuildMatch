@@ -13,7 +13,7 @@ não usa o banco: isso começa na etapa 2.
 | 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos | **Pronto** (convites e salvos ficam para depois) |
 | 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do contato | **Pronto** (aplicar `20261003000000_conversas.sql`) |
 | 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | **Pronto** (aplicar `20261004000000_reputacao.sql`) |
-| 6. Avisos e plano | E-mails e notificações, lembrete de 7 dias, cobrança do plano | Próxima |
+| 6. Avisos e plano | Avisos no app, preferências, tela do plano | **Parte 1 pronta** (aplicar `20261005000000_notificacoes.sql`) · e-mails, lembrete de 7 dias e cobrança: próxima parte |
 
 Enquanto isso, o protótipo com dados fictícios continua no ar como demonstração, na raiz do site.
 A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
@@ -100,6 +100,34 @@ avaliações, aparece "reputação em construção".
 
 Teste: `docs/tests/contratacao-supabase-local.js` (35 verificações).
 
+### Etapa 6, parte 1: avisos no app e plano
+
+**Antes de publicar esta etapa, aplique no SQL Editor** o arquivo
+[`supabase/migrations/20261005000000_notificacoes.sql`](../supabase/migrations/20261005000000_notificacoes.sql)
+(pode rodar mais de uma vez). Ele cria a tabela `notificacoes` e os gatilhos que avisam, sempre o outro lado de
+quem agiu:
+
+| Evento | Quem recebe |
+| --- | --- |
+| Mensagem nova (as da mesma conversa viram um aviso só, com a mais recente) | O outro lado da conversa |
+| Candidatura nova · candidatura retirada | A empresa |
+| Chamado para conversa · não selecionado · vaga encerrada | O profissional |
+| Contratação registrada (confirmar) · confirmada · contestada · recusada · combinado revisto | O outro lado |
+| Fim do vínculo (avaliação aberta) · a outra parte avaliou · avaliações publicadas | Os dois / o outro lado |
+
+Ninguém cria aviso pela tela: só os gatilhos do banco. Cada um vê e marca como lidos só os próprios avisos, e a
+preferência "No app" desligada numa categoria faz o banco não criar avisos dela.
+
+| Tela | O que faz |
+| --- | --- |
+| Sino no início | Número de avisos não lidos; abre `notificacoes.html`. |
+| `notificacoes.html` | Avisos novos destacados e anteriores, cada um levando à tela certa (conversa, candidatos, contratações, avaliar). Abrir marca tudo como lido. **Como receber**: por categoria, no app e por e-mail. |
+| `plano.html` (empresa) | Período grátis (começa na primeira vaga, dias restantes), vagas ativas usadas do limite, o plano Essencial e o que é sempre grátis. O início avisa quando faltam 7 dias ou menos e quando o período termina. |
+
+A coluna `email_em` e a preferência "Por e-mail" já ficam prontas para a parte 2 (envio dos e-mails).
+
+Teste: `docs/tests/avisos-supabase-local.js` (18 verificações).
+
 ### Modelos de e-mail em português
 
 Os dois e-mails da conta, com a identidade do Match, estão em `supabase/templates/`. Em
@@ -173,11 +201,11 @@ Tudo isto vale mesmo que alguém altere o JavaScript do site, porque as regras r
 ## Testar o esquema
 
 `supabase/tests/rls_regras.sql` simula duas empresas, dois profissionais e um visitante sem conta,
-e confere as regras acima. São 115 verificações. **Rode só num projeto de teste**, porque o
+e confere as regras acima. São 122 verificações. **Rode só num projeto de teste**, porque o
 arquivo cria usuários fictícios.
 
 - No Supabase: crie um projeto de teste, aplique o esquema e rode o arquivo de testes no SQL Editor.
-  A última consulta mostra "115 / 115 passaram".
+  A última consulta mostra "122 / 122 passaram".
 - Localmente, com PostgreSQL 16, num banco vazio:
   ```
   psql -d kor -f supabase/tests/supabase_local_stub.sql   # imita os esquemas auth e storage do Supabase
