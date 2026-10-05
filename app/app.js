@@ -2864,7 +2864,8 @@
     mensagens: { rotulo: 'Mensagens', texto: 'Nova mensagem numa conversa', icone: 'message' },
     candidaturas: { rotulo: 'Candidaturas', texto: 'Candidatura nova, retorno da empresa, vaga encerrada', icone: 'clipboard' },
     contratacao: { rotulo: 'Contratação e combinado', texto: 'Pedido de confirmação, contestação, recusa', icone: 'check' },
-    avaliacoes: { rotulo: 'Avaliações', texto: 'Avaliação aberta, a outra parte avaliou, avaliações publicadas', icone: 'star' }
+    avaliacoes: { rotulo: 'Avaliações', texto: 'Avaliação aberta, a outra parte avaliou, avaliações publicadas', icone: 'star' },
+    plano: { rotulo: 'Plano', texto: 'Fim do período grátis e assinatura', icone: 'clock', soEmpresa: true }
   };
 
   function tempoRelativo(iso) {
@@ -2925,13 +2926,13 @@
         (antigas.length ? '<section class="section" aria-labelledby="h-antigas"><h2 id="h-antigas">' + (novas.length ? 'Anteriores' : 'Avisos') + '</h2>' + antigas.map(item).join('') + '</section>' : '') +
         '<section class="section" id="prefs" aria-labelledby="h-prefs"><h2 id="h-prefs">Como receber</h2>' +
           '<div class="card"><p class="row-sub">Escolha o que aparece aqui no app e o que chega por e-mail.</p>' +
-          Object.keys(CATEGORIAS_AVISO).map(function (k) {
+          Object.keys(CATEGORIAS_AVISO).filter(function (k) { return !CATEGORIAS_AVISO[k].soEmpresa || conta.perfil.tipo === 'empresa'; }).map(function (k) {
             var c = CATEGORIAS_AVISO[k], p = prefs[k] || { push: true, email: true };
             return '<fieldset class="pref-linha"><legend class="row-title">' + esc(c.rotulo) + '</legend><p class="row-sub">' + esc(c.texto) + '</p>' +
               '<label class="check-row"><input type="checkbox" data-pref="' + k + '" data-canal="push"' + (p.push ? ' checked' : '') + '><span>No app</span></label>' +
               '<label class="check-row"><input type="checkbox" data-pref="' + k + '" data-canal="email"' + (p.email ? ' checked' : '') + '><span>Por e-mail</span></label></fieldset>';
           }).join('') +
-          '<p class="row-sub">Os avisos por e-mail começam a ser enviados em breve; sua escolha já fica guardada.</p></div></section>';
+          '<p class="row-sub">Por e-mail, os avisos que você ainda não viu aqui chegam juntos, em um e-mail só.</p></div></section>';
     }
 
     $('#content').addEventListener('change', function (e) {
@@ -2961,38 +2962,110 @@
       texto: 'Grátis até ' + dataBR(a.gratis_ate) + '. Depois disso, escolha o Essencial para continuar publicando. Suas vagas não são apagadas.' };
   }
 
+  // Chama a Edge Function "assinatura" e devolve o JSON (ou lança o erro com a mensagem da função).
+  function chamarAssinatura(acao) {
+    return sb.functions.invoke('assinatura', { body: { acao: acao } }).then(function (r) {
+      if (!r.error) return r.data;
+      var ctx = r.error.context;
+      return (ctx && ctx.json ? ctx.json().catch(function () { return {}; }) : Promise.resolve({})).then(function (j) {
+        throw new Error((j && j.erro) || 'Não foi possível falar com o servidor agora. Tente de novo em instantes.');
+      });
+    });
+  }
+
   function renderPlano() {
     topo('Plano', 'perfil.html');
-    contaDoTipo('empresa').then(function (conta) {
-      if (!conta) return;
+    var conta, tentativas = 0, confirmandoCancelar = false;
+    contaDoTipo('empresa').then(function (c) {
+      if (!c) return;
+      conta = c;
       navBeta('empresa', 'perfil');
+      return carregar();
+    }).catch(function (err) { erroCarregar(err, 'perfil.html'); });
+
+    function carregar() {
       return Promise.all([
         sb.from('assinaturas').select('*').eq('empresa_id', conta.dados.id).maybeSingle(),
-        sb.from('vagas').select('id', { count: 'exact', head: true }).eq('empresa_id', conta.dados.id).eq('status', 'aberta')
+        sb.from('vagas').select('id', { count: 'exact', head: true }).eq('empresa_id', conta.dados.id).eq('status', 'aberta'),
+        sb.from('planos').select('*').eq('id', 'essencial').maybeSingle(),
+        sb.from('cotacoes').select('taxa, data').eq('par', 'USD/BRL').order('data', { ascending: false }).limit(1).maybeSingle()
       ]).then(function (rs) {
-        var a = rs[0].data, ativas = rs[1].count || 0;
-        var st = situacaoPlano(a, ativas);
-        var limite = a ? a.limite_vagas_ativas : 3;
-        $('#content').innerHTML =
-          '<section class="card' + (st.alerta ? ' card-warn' : '') + '" id="plano-situacao"><div class="head-row"><h2 class="card-title">' + esc(st.titulo) + '</h2>' +
-            '<span class="chip ' + (st.fase === 'encerrado' ? 'red' : st.fase === 'ativa' ? 'green' : 'blue') + '">' + (st.fase === 'ativa' ? 'Ativo' : st.fase === 'encerrado' ? 'Encerrado' : 'Grátis') + '</span></div>' +
-            '<p class="row-sub">' + esc(st.texto) + '</p>' +
-            '<dl class="summary"><div><dt>Vagas ativas</dt><dd id="uso-vagas">' + ativas + ' de ' + limite + '</dd></div>' +
-              (a ? '<div><dt>Grátis desde</dt><dd>' + dataBR(a.gratis_desde) + '</dd></div>' : '') + '</dl></section>' +
-          '<section class="section"><h2>Plano Essencial</h2><div class="card plano-card">' +
-            '<div class="plano-preco"><b>US$ 79</b><span>por mês</span></div>' +
-            '<ul class="check-list">' + ['Até 3 vagas ativas', 'Indicações completas de profissionais', '30 convites diretos por mês', 'Filtros avançados na busca'].map(function (x) {
-              return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>';
-            }).join('') + '</ul>' +
-            (st.fase === 'ativa' ? '' : '<button type="button" class="btn btn-primary" id="assinar" data-proxima>Assinar o Essencial</button>' +
-              '<p class="row-sub">A assinatura pelo app chega na próxima etapa da beta. Até lá, o período grátis segue valendo.</p>') +
-          '</div></section>' +
-          '<section class="section"><h2>Sempre grátis</h2><div class="card"><ul class="check-list">' +
-            ['Confirmar contratações e avaliar', 'Conversar com candidatos', 'Responder candidaturas'].map(function (x) {
-              return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>';
-            }).join('') + '</ul><p class="row-sub">Cobrar pelo preenchimento faria empresas deixarem de marcar vagas como preenchidas, e sem vínculo verificado não existe reputação.</p></div></section>';
+        var plano = rs[2].data;
+        if (plano) plano.cotacao = rs[3] && rs[3].data;
+        pintar(rs[0].data, rs[1].count || 0, plano);
       });
-    }).catch(function (err) { erroCarregar(err, 'perfil.html'); });
+    }
+
+    function pintar(a, ativas, plano) {
+      var st = situacaoPlano(a, ativas);
+      var limite = a ? a.limite_vagas_ativas : 3;
+      var ativa = a && a.status === 'ativa';
+      var pendenteMp = a && a.mp_status === 'pending' && !ativa;
+      var retorno = params.get('assinatura') === 'retorno';
+      var preco = plano && plano.preco ? dinheiro(Number(plano.preco), plano.moeda) : null;
+      // Preço em dólar, cobrado em reais pela cotação do dia (PTAX do Banco Central).
+      var emDolar = preco && plano.moeda !== 'BRL';
+      var cot = emDolar && plano.cotacao && plano.moeda === 'USD' ? plano.cotacao : null;
+      var reais = emDolar ? (cot
+        ? '≈ ' + dinheiro(Math.round(Number(plano.preco) * Number(cot.taxa) * 100) / 100, 'BRL') + ' hoje · dólar a R$ ' +
+          Number(cot.taxa).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' (PTAX de ' + dataBR(cot.data) + '). '
+        : '') + 'Cobrado em reais, pela cotação do dólar do dia.' : '';
+      var gratisAte = a && a.status === 'gratis' && new Date(a.gratis_ate) > new Date() ? dataBR(a.gratis_ate) : null;
+      var acao;
+      if (ativa) {
+        acao = (a.proximo_pagamento ? '<p class="row-sub" id="proxima-cobranca">Próxima cobrança em ' + dataBR(a.proximo_pagamento) +
+            (emDolar ? (a.valor_cobrado ? ': cerca de ' + dinheiro(Number(a.valor_cobrado), 'BRL') : '') + ', pela cotação do dólar do dia' : '') + ', pelo Mercado Pago.</p>' : '') +
+          (confirmandoCancelar
+            ? '<div class="card-warn confirmar"><p class="row-sub">Cancelar a assinatura? Você deixa de publicar e reativar vagas quando o período pago terminar. As vagas não são apagadas.</p>' +
+              '<div class="btn-row"><button type="button" class="btn btn-primary" id="cancelar-sim">Sim, cancelar</button><button type="button" class="btn btn-outline" id="cancelar-nao">Voltar</button></div></div>'
+            : '<button type="button" class="btn btn-outline btn-quiet" id="cancelar">Cancelar assinatura</button>');
+      } else if (!preco) {
+        acao = '<button type="button" class="btn btn-primary" id="assinar" disabled aria-disabled="true">Assinar o Essencial</button>' +
+          '<p class="row-sub">O preço do plano ainda está sendo definido. Até lá, o período grátis segue valendo.</p>';
+      } else {
+        acao = '<button type="button" class="btn btn-primary" id="assinar">Assinar o Essencial</button>' +
+          '<p class="row-sub">Pagamento recorrente com cartão pelo Mercado Pago.' + (gratisAte ? ' A primeira cobrança só acontece no fim do período grátis, em ' + gratisAte + '.' : '') + '</p>';
+      }
+      $('#content').innerHTML =
+        (retorno && !ativa ? aviso('Recebemos o retorno do Mercado Pago. A confirmação da assinatura pode levar alguns minutos; esta tela atualiza sozinha.') : '') +
+        (retorno && ativa ? aviso('Assinatura confirmada. Obrigado!') : '') +
+        (pendenteMp && !retorno ? aviso('Você começou a assinatura no Mercado Pago, mas ela ainda não foi confirmada. Se não concluiu o pagamento, assine de novo.', 'amber') : '') +
+        '<section class="card' + (st.alerta && !ativa ? ' card-warn' : '') + '" id="plano-situacao"><div class="head-row"><h2 class="card-title">' + esc(st.titulo) + '</h2>' +
+          '<span class="chip ' + (st.fase === 'encerrado' ? 'red' : ativa ? 'green' : 'blue') + '">' + (ativa ? 'Ativo' : st.fase === 'encerrado' ? 'Encerrado' : 'Grátis') + '</span></div>' +
+          '<p class="row-sub">' + esc(st.texto) + '</p>' +
+          '<dl class="summary"><div><dt>Vagas ativas</dt><dd id="uso-vagas">' + ativas + ' de ' + limite + '</dd></div>' +
+            (a ? '<div><dt>Grátis desde</dt><dd>' + dataBR(a.gratis_desde) + '</dd></div>' : '') + '</dl></section>' +
+        '<section class="section"><h2>Plano Essencial</h2><div class="card plano-card">' +
+          '<div class="plano-preco" id="plano-preco">' + (preco ? '<b>' + esc(preco) + '</b><span>por mês</span>' : '<b>Em definição</b>') + '</div>' +
+          (reais ? '<p class="row-sub" id="plano-reais">' + esc(reais) + '</p>' : '') +
+          '<ul class="check-list">' + ['Até 3 vagas ativas', 'Indicações completas de profissionais', '30 convites diretos por mês', 'Filtros avançados na busca'].map(function (x) {
+            return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>';
+          }).join('') + '</ul><div id="plano-acao">' + acao + '</div>' +
+          '<p class="form-status" id="form-status" role="alert"></p></div></section>' +
+        '<section class="section"><h2>Sempre grátis</h2><div class="card"><ul class="check-list">' +
+          ['Confirmar contratações e avaliar', 'Conversar com candidatos', 'Responder candidaturas'].map(function (x) {
+            return '<li>' + icon('check', 16, { stroke: 2.6 }) + '<span>' + esc(x) + '</span></li>';
+          }).join('') + '</ul><p class="row-sub">Cobrar pelo preenchimento faria empresas deixarem de marcar vagas como preenchidas, e sem vínculo verificado não existe reputação.</p></div></section>';
+
+      var bA = $('#assinar');
+      if (bA && !bA.disabled) bA.addEventListener('click', function () {
+        ocupado(bA, true, 'Abrindo o Mercado Pago…');
+        chamarAssinatura('assinar').then(function (d) { window.location.href = d.url; })
+          .catch(function (err) { ocupado(bA, false); status(err.message); });
+      });
+      var bC = $('#cancelar');
+      if (bC) bC.addEventListener('click', function () { confirmandoCancelar = true; pintar(a, ativas, plano); });
+      var bN = $('#cancelar-nao');
+      if (bN) bN.addEventListener('click', function () { confirmandoCancelar = false; pintar(a, ativas, plano); });
+      var bS = $('#cancelar-sim');
+      if (bS) bS.addEventListener('click', function () {
+        ocupado(bS, true, 'Cancelando…');
+        chamarAssinatura('cancelar').then(function () { confirmandoCancelar = false; toast('Assinatura cancelada.'); carregar(); })
+          .catch(function (err) { ocupado(bS, false); status(err.message); });
+      });
+      // Voltando do checkout: confere de novo algumas vezes até o Mercado Pago confirmar.
+      if (retorno && !ativa && tentativas < 10) { tentativas++; setTimeout(carregar, 3000); }
+    }
   }
 
   var PAGES = {

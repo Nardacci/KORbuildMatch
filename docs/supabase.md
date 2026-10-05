@@ -13,7 +13,7 @@ não usa o banco: isso começa na etapa 2.
 | 3. Vagas e candidaturas | Publicar vaga, buscar, candidatar-se, funil de candidatos | **Pronto** (convites e salvos ficam para depois) |
 | 4. Mensagens | Conversas em tempo real, "Sem resposta", liberação do contato | **Pronto** (aplicar `20261003000000_conversas.sql`) |
 | 5. Contratação e reputação | Combinado, confirmação, contestação, avaliação cega, reputação | **Pronto** (aplicar `20261004000000_reputacao.sql`) |
-| 6. Avisos e plano | Avisos no app, preferências, tela do plano | **Parte 1 pronta** (aplicar `20261005000000_notificacoes.sql`) · e-mails, lembrete de 7 dias e cobrança: próxima parte |
+| 6. Avisos e plano | Avisos no app, preferências, tela do plano, lembretes, e-mails, assinatura | **Pronto**: parte 1 (aplicar `20261005000000_notificacoes.sql`) · parte 2, lembretes, e-mails e Mercado Pago (aplicar `20261006000000_lembretes_cobranca.sql` e seguir os passos abaixo) |
 
 Enquanto isso, o protótipo com dados fictícios continua no ar como demonstração, na raiz do site.
 A versão real fica em `app/` (ex.: `korbuildmatch.com/app/entrar.html`).
@@ -124,9 +124,87 @@ preferência "No app" desligada numa categoria faz o banco não criar avisos del
 | `notificacoes.html` | Avisos novos destacados e anteriores, cada um levando à tela certa (conversa, candidatos, contratações, avaliar). Abrir marca tudo como lido. **Como receber**: por categoria, no app e por e-mail. |
 | `plano.html` (empresa) | Período grátis (começa na primeira vaga, dias restantes), vagas ativas usadas do limite, o plano Essencial e o que é sempre grátis. O início avisa quando faltam 7 dias ou menos e quando o período termina. |
 
-A coluna `email_em` e a preferência "Por e-mail" já ficam prontas para a parte 2 (envio dos e-mails).
+A coluna `email_em` e a preferência "Por e-mail" são usadas pela parte 2 (envio dos e-mails).
 
 Teste: `docs/tests/avisos-supabase-local.js` (18 verificações).
+
+### Etapa 6, parte 2: lembretes, e-mails de aviso e assinatura (Mercado Pago)
+
+Faça nesta ordem. Os segredos (senha do e-mail, token do Mercado Pago) ficam **só** em
+Edge Functions → Secrets: nunca no site nem no GitHub.
+
+**1. Banco.** No SQL Editor, aplique
+[`supabase/migrations/20261006000000_lembretes_cobranca.sql`](../supabase/migrations/20261006000000_lembretes_cobranca.sql)
+e depois
+[`supabase/migrations/20261007000000_cotacao_dolar.sql`](../supabase/migrations/20261007000000_cotacao_dolar.sql)
+(os dois podem rodar mais de uma vez; numa consulta nova, com nada selecionado). Eles criam:
+
+| O quê | Para quê |
+| --- | --- |
+| `lembretes_diarios()` | Uma vez por dia: avisa a empresa (e o profissional) sobre candidatos "novos" há mais de 7 dias; avisa quem ainda não avaliou quando faltam 2 dias; avisa a empresa com 7 dias, 1 dia e no dia em que o período grátis termina. Cada lembrete sai uma vez só. |
+| `avisos_pendentes_email()` · `marcar_avisos_enviados()` | A fila dos e-mails: avisos não lidos no app há mais de 3 minutos, agrupados por pessoa, respeitando "Por e-mail" nas preferências. |
+| Tabela `planos` | O preço do Essencial **em dólar**: começa em US$ 79 (`moeda` = `USD`). Para mudar: Table Editor → `planos` → linha `essencial` → coluna `preco`. Vazio, a tela mostra "Em definição" e o botão de assinar fica desligado. |
+| Tabela `cotacoes` | Cotação de venda PTAX do dólar (Banco Central), uma por dia. Mesmo modelo do KORbuild: o Mercado Pago cobra em reais o preço em dólar convertido pela cotação do dia. |
+| Colunas `mp_preapproval_id`, `mp_status`, `proximo_pagamento`, `valor_cobrado`, `cotacao_usada`, `cotacao_data` em `assinaturas` | Situação da assinatura no Mercado Pago e o valor em reais combinado com ele (só o servidor altera). |
+
+**2. E-mail da Hostinger para tudo.** Em **Authentication → Emails → SMTP Settings**, ligue
+"Enable custom SMTP": host `smtp.hostinger.com`, porta `465`, usuário `no-reply@getkolbuild.com`,
+a senha da caixa, remetente `no-reply@getkolbuild.com`, nome `KORbuild Match`. Assim os e-mails de
+cadastro e de senha também saem pela Hostinger (e sem o limite de envio do Supabase).
+
+**3. Segredos.** Em **Edge Functions → Secrets**, crie:
+
+| Nome | Valor |
+| --- | --- |
+| `SMTP_HOST` | `smtp.hostinger.com` |
+| `SMTP_PORT` | `465` (as funções do Supabase não podem usar a 587) |
+| `SMTP_USER` | `no-reply@getkolbuild.com` |
+| `SMTP_PASS` | a senha da caixa na Hostinger |
+| `EMAIL_FROM` | `KORbuild Match <no-reply@getkolbuild.com>` |
+| `SITE_URL` | `https://korbuildmatch.com` |
+| `CRON_SECRET` | uma senha longa inventada por você (usada no passo 6; as duas funções usam) |
+| `MP_ACCESS_TOKEN` | Mercado Pago → Suas integrações → a aplicação → Credenciais de produção → Access Token |
+| `MP_WEBHOOK_SECRET` | a "assinatura secreta" gerada no passo 5 |
+
+`SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` o Supabase já entrega às funções sozinho.
+
+**4. Funções.** Em **Edge Functions → Deploy a new function → Via Editor**, crie duas funções, cada
+uma com os dois arquivos da pasta (`index.ts` e `lib.ts`):
+
+| Função | Pasta | "Verify JWT" |
+| --- | --- | --- |
+| `enviar-avisos` | `supabase/functions/enviar-avisos/` | **Desligado** (quem chama é o agendamento, com o `CRON_SECRET`) |
+| `assinatura` | `supabase/functions/assinatura/` | **Desligado** (o Mercado Pago chama sem login; a própria função confere o login da empresa e a assinatura do webhook) |
+
+Pelo terminal, o equivalente é `supabase functions deploy enviar-avisos --no-verify-jwt` e
+`supabase functions deploy assinatura --no-verify-jwt`.
+
+**5. Webhook do Mercado Pago.** Em Suas integrações → a aplicação → **Webhooks → Configurar
+notificações** (modo produção): URL
+`https://gbdmtgephszxhaprpiss.supabase.co/functions/v1/assinatura/webhook`, evento **Planos e
+assinaturas** (subscription_preapproval). Salve e copie a **assinatura secreta** para o segredo
+`MP_WEBHOOK_SECRET`.
+
+**6. Agendamentos.** Primeiro guarde no Vault o mesmo valor do segredo `CRON_SECRET`, numa consulta só
+para isso: `select vault.create_secret('SEU_CRON_SECRET', 'kor_cron_secret');`. Depois rode
+[`supabase/agendamentos.sql`](../supabase/agendamentos.sql) inteiro (ele não tem segredo nenhum: lê do Vault).
+Ele liga `pg_cron` e `pg_net` e agenda os lembretes (todo dia, 9h de Brasília),
+os e-mails (a cada 10 minutos) e a cotação do dólar (todo dia, 14h10 de Brasília, depois de o Banco Central
+publicar a PTAX do dia).
+
+**Dólar → real.** Ao assinar, a função usa a cotação PTAX do dia (se ainda não houver uma recente guardada, busca
+na hora no Banco Central) e cria a assinatura no Mercado Pago em reais. Como o Mercado Pago repete todo mês o mesmo
+valor, a rotina diária da cotação atualiza o valor das assinaturas que têm cobrança nos próximos 3 dias: cada mês
+é cobrado pela cotação da véspera da cobrança.
+
+Como fica para a empresa, em `plano.html`: preço em dólar e quanto dá em reais hoje (com a cotação usada) → **Assinar** leva ao checkout do
+Mercado Pago → na volta, a tela espera a confirmação → plano ativo com a data e o valor aproximado da próxima cobrança e
+**Cancelar assinatura**. Quem assina ainda no período grátis só começa a pagar quando ele termina.
+Cancelando, a empresa volta ao grátis se ainda houver dias, ou ao plano encerrado (as vagas não são apagadas).
+
+Testes: `docs/tests/plano-emails-supabase-local.js` (24 verificações, com as funções reais no Deno, um
+Mercado Pago, um Banco Central e um servidor de e-mail falsos) e `supabase/functions/testes_unitarios.test.ts`
+(`deno test supabase/functions/testes_unitarios.test.ts`).
 
 ### Modelos de e-mail em português
 
